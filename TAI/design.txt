@@ -1,0 +1,35 @@
+TAI/
+│
+├── TAI/
+│   ├── __init__.py
+│   ├── analytics/
+│   │   ├── __init__.py
+│   │   ├── data_analytics.py
+│   ├── broker/
+│   │   ├── __init__.py
+│   │   ├── alpaca.py
+│   │   ├── ib.py
+│   ├── data/
+│   │   ├── __init__.py
+│   │   ├── atom.py
+│   │   ├── bls.py
+│   │   ├── db.py
+│   ├── genai/
+│   │   ├── __init__.py
+│   │   ├── genai.py
+│   ├── auth_handler.py
+│   ├── config.ini
+│   ├── auth_sync.py
+├── tests/
+│   ├── test_data_analytics.py
+│   ├── test_alpaca.py
+│   ├── test_ib.py
+│   ├── test_atom.py
+│   ├── test_bls.py
+│   ├── test_db.py
+│   ├── test_genai.py
+│   ├── test_auth_handler.py
+│   ├── test_auth_sync.py
+│   ├── __init__.py
+├── setup.py
+└── README.md
