@@ -46,8 +46,9 @@ class BLS:
         df = pd.DataFrame(all_data)
         df['date'] = pd.to_datetime(df['year'] + df['period'].str.replace('M', '-'), format='%Y-%m')
         df.sort_values(by=['series_id', 'date'], inplace=True)
+        df['mom_diff'] = df['value'].diff()  # Calculate the month-over-month difference
         return df
-
+    
     def us_job_opening(self):
         return self.fetch_bls_data(series_ids=["JTS000000000000000JOL"], 
                                    start_year=datetime.now().year - self.lookback_years, 
@@ -82,6 +83,7 @@ if __name__ == "__main__":
     # Example usage
     df_us_job_opening = bls.us_job_opening()
     df_nonfarm_payroll = bls.nonfarm_payroll()
+    print (df_nonfarm_payroll)
     df_cps_n_ces = bls.cps_n_ces()
     df_us_avg_weekly_hours = bls.us_avg_weekly_hours()
     df_unemployment_by_demographic = bls.unemployment_by_demographic()

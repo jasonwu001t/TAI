@@ -22,7 +22,7 @@ class BLS:
         self.lookback_years = 4
         # self.data_saver = DataSaver()
 
-    def fetch_bls_data(self, series_ids, start_year, end_year):
+    def fetch_bls_data(self, series_ids, start_year, end_year, mom_diff=True):
         headers = {'Content-type': 'application/json'}
         data = json.dumps({
             "seriesid": series_ids,
@@ -46,18 +46,27 @@ class BLS:
         df = pd.DataFrame(all_data)
         df['date'] = pd.to_datetime(df['year'] + df['period'].str.replace('M', '-'), format='%Y-%m')
         df.sort_values(by=['series_id', 'date'], inplace=True)
-        return df
-
-    def us_job_opening(self):
-        return self.fetch_bls_data(series_ids=["JTS000000000000000JOL"], 
-                                   start_year=datetime.now().year - self.lookback_years, 
-                                   end_year=datetime.now().year)
+        if mom_diff==True:
+            df['mom_diff'] = df['value'].diff()  # Calculate the month-over-month difference
+            return df
+        else:
+            return df
 
     def nonfarm_payroll(self):
         return self.fetch_bls_data(series_ids=["CES0000000001"], 
                                    start_year=datetime.now().year - self.lookback_years, 
                                    end_year=datetime.now().year)
+    
+    def unemployment_rate(self):
+        return self.fetch_bls_data(series_ids=["LNS14000000"], 
+                                   start_year=datetime.now().year - self.lookback_years, 
+                                   end_year=datetime.now().year, mom_diff=False)
 
+    def us_job_opening(self):
+        return self.fetch_bls_data(series_ids=["JTS000000000000000JOL"], 
+                                   start_year=datetime.now().year - self.lookback_years, 
+                                   end_year=datetime.now().year)
+    
     def cps_n_ces(self):
         return self.fetch_bls_data(series_ids=["CES0000000001", "LNS12000000"], 
                                    start_year=datetime.now().year - self.lookback_years, 
@@ -78,13 +87,15 @@ class BLS:
 
 if __name__ == "__main__":
     bls = BLS()
-    
-    # Example usage
-    df_us_job_opening = bls.us_job_opening()
+
+    df_unemployment_rate = bls.unemployment_rate()
     df_nonfarm_payroll = bls.nonfarm_payroll()
+    df_us_job_opening = bls.us_job_opening()
     df_cps_n_ces = bls.cps_n_ces()
     df_us_avg_weekly_hours = bls.us_avg_weekly_hours()
     df_unemployment_by_demographic = bls.unemployment_by_demographic()
+    
+    print (df_us_job_opening, df_nonfarm_payroll)
 
     dataframes = {
         'us_job_opening': df_us_job_opening,
