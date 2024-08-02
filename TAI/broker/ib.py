@@ -13,6 +13,7 @@ class IBAuth:
         self.host = config_loader.get_config('IB', 'host')
         self.port = config_loader.get_config('IB', 'port')
         self.client_id = config_loader.get_config('IB', 'client_id')
+        # print (self.host, int(self.port), int(self.client_id))
 
     def connect(self):
         ib = IB()

@@ -1,3 +1,5 @@
+LICENSE
+README.md
 setup.py
 TAI/__init__.py
 TAI.egg-info/PKG-INFO
