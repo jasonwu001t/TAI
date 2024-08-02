@@ -3,6 +3,7 @@ import numpy as np
 from datetime import datetime, date
 from TAI.broker.ib import IBTrade
 
+#
 class OptionBet:
     def __init__(self, ticker, expiry_date):
         self.ib = IBTrade()
