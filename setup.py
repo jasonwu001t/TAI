@@ -20,6 +20,7 @@ setup(
         "psycopg2-binary",
         "mysql-connector-python",
         "boto3",
+        "openai",
         "ib_insync",
         "alpaca-py",
         "robin_stocks",
