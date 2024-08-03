@@ -9,16 +9,20 @@ import logging
 logging.basicConfig(level=logging.INFO)
 
 class DataAnalytics:
-    def __init__(self, df):
+    def __init__(self, df, ts=True):
         """
         Initialize the DataAnalytics class with a DataFrame.
         
         :param df: DataFrame with at least two columns: date/datetime and a numerical column.
         """
-        date_column = df.columns[0]
-        df[date_column] = pd.to_datetime(df[date_column])
-        # df.set_index(date_column, inplace=True)
-        self.df = df
+        if ts == True: #apply to time series data only
+            self.date_column = df.columns[0]
+            self.value_column = df.columns[1]
+            df[self.date_column] = pd.to_datetime(df[self.date_column])
+            # df.set_index(date_column, inplace=True)
+            self.df = df.copy()
+        else:
+            self.df =df.copy()
 
     def get_pct_weights(self):
         """
@@ -32,7 +36,6 @@ class DataAnalytics:
         | 2023-04-01 |     22 |     43 |
         | 2023-04-02 |      4 |     12 |
         """
-        df = self.df.copy()
         non_date_columns = df.columns
         df['row_sum'] = df[non_date_columns].sum(axis=1)
         for column in non_date_columns:
@@ -53,18 +56,19 @@ class DataAnalytics:
         | 2023-01-01 |     22 |     43 |
         | 2023-04-01 |      4 |     12 |
         """
-        df_c = self.df.copy()
-        date_column = df_c.columns[0]
-        df_c[date_column] = pd.to_datetime(df_c[date_column])
-        df_c.set_index(date_column, inplace=True)
+        # date_column = df.columns[0]
+        # df[date_column] = pd.to_datetime(df[date_column])
+        # df.set_index(date_column, inplace=True)
 
         def last_non_null(s):
             return s.dropna().iloc[-1]
-
-        period_data = df_c.resample(period).agg(last_non_null)
+        
+        self.df.set_index(self.date_column,inplace=True)
+        period_data = self.df.resample(period).agg(last_non_null)
         period_data.reset_index(inplace=True)
+
         period_label = "quarter" if period == 'Q' else "year"
-        period_data[period_label] = period_data[date_column].dt.to_period(period).astype(str)
+        period_data[period_label] = period_data[self.date_column].dt.to_period(period).astype(str)
         return period_data
     
     def calculate_category_weights(self, df):
@@ -80,7 +84,7 @@ class DataAnalytics:
         | 2023-04-01 | A        | 100   |
         | 2023-04-01 | B        | 200   |
         """
-        df['percentage'] = df.groupby('datetime')['value'].apply(lambda x: 100 * x / x.sum())
+        df['percentage'] = df.groupby(self.date_column)[self.value_column].apply(lambda x: 100 * x / x.sum())
         return df
     
     def filter_by_quarter_and_year(self, df):
@@ -96,16 +100,17 @@ class DataAnalytics:
         | 2023-03-18 | 22     | 43     |
         | 2023-02-14 | 18     | 39     |
         """
-        df['datetime'] = pd.to_datetime(df.iloc[:, 0])
-        df.set_index('datetime', inplace=True)
-        df.sort_index(inplace=True)
+        # df['datetime'] = pd.to_datetime(df.iloc[:, 0])
+        # df.set_index('datetime', inplace=True)
+        # df.sort_index(inplace=True)
 
         # Filter by quarter
-        quarterly = df.resample('Q').last().dropna().reset_index()
+        self.df.set_index(self.date_column,inplace=True)
+        quarterly = self.df.resample('Q').last().dropna().reset_index()
         quarterly['quarter'] = quarterly['datetime'].dt.to_period('Q').astype(str)
 
         # Filter by year
-        yearly = df.resample('Y').last().dropna().reset_index()
+        yearly = self.df.resample('Y').last().dropna().reset_index()
         yearly['year'] = yearly['datetime'].dt.year.astype(str)
 
         return quarterly, yearly

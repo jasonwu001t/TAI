@@ -30,7 +30,6 @@ class QuickPlot:
         fig.update_traces(textposition='top center')
         return fig
 
-
     def plot_line_with_events(self, title="Line Plot with Events", events=None):
         fig = self.plot_line(title=title)
 
@@ -44,7 +43,12 @@ class QuickPlot:
         return fig
     
     def plot_monthly_heatmap(self, df):
-        """Plot a heatmap with annotations of monthly returns."""
+        """Plot a heatmap with annotations of monthly returns.
+        DF Input Sample, we have to make sure its already monthly data here (not daily)
+                date	value	Year	Month
+        2020-01-31	4.967142	2020	Jan
+        2020-02-29	-1.382643	2020	Feb
+        """
         month_order = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
         df['Month'] = pd.Categorical(df['Month'], categories=month_order, ordered=True)
         pivot_table = df.pivot(index='Year', columns='Month', values='value').fillna(0)
