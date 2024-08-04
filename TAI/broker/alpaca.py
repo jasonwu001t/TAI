@@ -42,7 +42,7 @@ class Alpaca:
         self.stock_md_client = auth.get_stock_md_client()
         self.option_md_client = auth.get_option_md_client()
 
-    def get_option_chain(self):
+    def get_option_chain(self): # read from example input
         pass
 
     def get_last_quote(self, symbol, asset='stock'): #bid,ask, mid?

@@ -1,6 +1,6 @@
 # Byte-compiled / optimized / DLL files
 # if the folder does not ignore it might because the folder was checked into git before, 
-# run git rm -r --cached <folder> then try to ignore again
+# run git rm -r --cached <folder/file> then try to ignore again
 *.py[cod]
 *$py.class
 
