@@ -1,6 +1,12 @@
 # alpaca.py ; https://alpaca.markets/learn/how-to-trade-options-with-alpaca/
 from TAI.utils import ConfigLoader
-from alpaca.data.historical import StockHistoricalDataClient, OptionHistoricalDataClient
+import json
+import pandas as pd
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+from alpaca.data.historical import (StockHistoricalDataClient, 
+                                    OptionHistoricalDataClient)
 from alpaca.data.requests import (StockBarsRequest, 
                                 StockLatestTradeRequest, 
                                 StockLatestQuoteRequest,
@@ -14,9 +20,6 @@ from alpaca.trading.requests import (MarketOrderRequest, GetOrdersRequest,
                                     )
 from alpaca.trading.enums import OrderSide, TimeInForce
 
-from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
-import json
 
 class AlpacaAuth:
     def __init__(self):
@@ -24,6 +27,11 @@ class AlpacaAuth:
         self.api_key = config_loader.get_config('Alpaca', 'api_key')
         self.api_secret = config_loader.get_config('Alpaca', 'api_secret')
         self.base_url = config_loader.get_config('Alpaca', 'base_url')
+
+        self.trade_api_url = None
+        self.trade_api_wss = None
+        self.data_api_url = None
+        self.option_stream_data_wss = None
 
     def get_trade_client(self):
         return TradingClient(self.api_key, self.api_secret, paper=True)
@@ -42,7 +50,36 @@ class Alpaca:
         self.stock_md_client = auth.get_stock_md_client()
         self.option_md_client = auth.get_option_md_client()
 
+    def option_chain_to_df(res):
+        option_contracts = []
+        for contract in res.option_contracts:
+            contract_dict = {
+                'close_price': contract.close_price,
+                'close_price_date': contract.close_price_date,#.isoformat(),
+                'expiration_date': contract.expiration_date,#.isoformat(),
+                'id': contract.id,
+                'name': contract.name,
+                'open_interest': contract.open_interest,
+                'open_interest_date': contract.open_interest_date,#.isoformat(),
+                'root_symbol': contract.root_symbol,
+                'size': contract.size,
+                'status': contract.status.value,
+                'strike_price': contract.strike_price,
+                'style': contract.style.value,
+                'symbol': contract.symbol,
+                'tradable': contract.tradable,
+                'type': contract.type.value,
+                'underlying_asset_id': str(contract.underlying_asset_id),
+                'underlying_symbol': contract.underlying_symbol
+            }
+            option_contracts.append(contract_dict)
+        df = pd.DataFrame(option_contracts)
+        return df
+
     def get_option_chain(self): # read from example input
+        """the output is alpaca.trading.models.OptionContractsResponse instead of raw json
+         Try quote.prce instead of quote['price']. If you need a raw json access, you can do quote._raw['price']
+        """
         pass
 
     def get_last_quote(self, symbol, asset='stock'): #bid,ask, mid?
