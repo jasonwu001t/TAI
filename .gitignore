@@ -1,15 +1,17 @@
 # Byte-compiled / optimized / DLL files
-__pycache__/
+# if the folder does not ignore it might because the folder was checked into git before, 
+# run git rm -r --cached <folder> then try to ignore again
 *.py[cod]
 *$py.class
 
 auth.ini
-/utils/auth.ini
+# /utils/auth.ini
 
 # C extensions
 *.so
 
 # Distribution / packaging
+__pycache__/
 .Python
 build/
 develop-eggs/
