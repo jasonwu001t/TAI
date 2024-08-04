@@ -78,7 +78,6 @@ class Alpaca:
         result = self.option_md_client.get_option_bars(req).df
         return result
 
-
     # Account Handler
     def get_account(self): #result in json includes current equity value, buying power, 
         return self.trade_client.get_account()
