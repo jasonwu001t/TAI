@@ -5,6 +5,7 @@
 *$py.class
 
 auth.ini
+.DS_Store
 # /utils/auth.ini
 
 # C extensions
