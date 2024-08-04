@@ -24,7 +24,7 @@ class DataAnalytics:
         else:
             self.df =df.copy()
 
-    def get_pct_weights(self):
+    def get_pct_weights(self): #works
         """
         Calculate percentage weights of numerical columns.
         
@@ -36,14 +36,15 @@ class DataAnalytics:
         | 2023-04-01 |     22 |     43 |
         | 2023-04-02 |      4 |     12 |
         """
-        non_date_columns = df.columns
-        df['row_sum'] = df[non_date_columns].sum(axis=1)
+        self.df.set_index(self.date_column,inplace=True)
+        non_date_columns = self.df.columns
+        self.df['row_sum'] = self.df[non_date_columns].sum(axis=1)
         for column in non_date_columns:
-            df[f'{column}_pct'] = (df[column] / df['row_sum']) * 100
-        df_pct = df[[f'{column}_pct' for column in non_date_columns]]
+            self.df[f'{column}_pct'] = (self.df[column] / self.df['row_sum']) * 100
+        df_pct = self.df[[f'{column}_pct' for column in non_date_columns]].reset_index() #only show the _pct columns
         return df_pct.round(2)
 
-    def filter_period(self, period='Q'):
+    def filter_period(self, period='Q'):  #works, period= Q or A for yearly
         """
         Filter data to show only the last non-null value of each period.
         
@@ -70,8 +71,8 @@ class DataAnalytics:
         period_label = "quarter" if period == 'Q' else "year"
         period_data[period_label] = period_data[self.date_column].dt.to_period(period).astype(str)
         return period_data
-    
-    def calculate_category_weights(self, df):
+
+    def calculate_category_weights(self): #works
         """
         Calculate the percentage weight for each category for each datetime.
         
@@ -83,37 +84,19 @@ class DataAnalytics:
         |------------|----------|-------|
         | 2023-04-01 | A        | 100   |
         | 2023-04-01 | B        | 200   |
+        sample output:
+        datetime	category	value	percentage
+    	2023-04-01	A	100	33.333333
+    	2023-04-01	B	200	66.666667
+    	2023-04-02	A	150	37.500000
+    	2023-04-02	B	250	62.500000
+    	2023-04-03	A	300	100.000000
         """
-        df['percentage'] = df.groupby(self.date_column)[self.value_column].apply(lambda x: 100 * x / x.sum())
-        return df
-    
-    def filter_by_quarter_and_year(self, df):
-        """
-        Filter down to the last date for each quarter and each year, and create a column indicating the quarter and year.
+        total = self.df.groupby(self.df.columns[0])[self.df.columns[2]].transform('sum')
+        # Calculate percentage
+        self.df['percentage'] = (self.df['value'] / total) * 100
         
-        :param df: DataFrame with first column as date/datetime and other numerical columns.
-        :return: DataFrame with filtered data and new quarter column.
-        
-        Input sample:
-        | datetime   | value1 | value2 |
-        |------------|--------|--------|
-        | 2023-03-18 | 22     | 43     |
-        | 2023-02-14 | 18     | 39     |
-        """
-        # df['datetime'] = pd.to_datetime(df.iloc[:, 0])
-        # df.set_index('datetime', inplace=True)
-        # df.sort_index(inplace=True)
-
-        # Filter by quarter
-        self.df.set_index(self.date_column,inplace=True)
-        quarterly = self.df.resample('Q').last().dropna().reset_index()
-        quarterly['quarter'] = quarterly['datetime'].dt.to_period('Q').astype(str)
-
-        # Filter by year
-        yearly = self.df.resample('Y').last().dropna().reset_index()
-        yearly['year'] = yearly['datetime'].dt.year.astype(str)
-
-        return quarterly, yearly
+        return self.df
     
     @staticmethod
     def dummy_value():
@@ -320,12 +303,11 @@ class DataAnalytics:
         | 2023-04-02 |      4 |
         """
         horizon = horizon - 1
-        df = self.df.copy()
-        df['perc_change'] = df.iloc[:, 0].pct_change(periods=horizon, fill_method='ffill').round(decimals=4)
+        self.df['perc_change'] = self.df.iloc[:, 0].pct_change(periods=horizon, fill_method='ffill').round(decimals=4)
         if keep_only_perc_change:
-            return df.drop(df.columns[0], axis=1).dropna()
+            return self.df.drop(self.df.columns[0], axis=1).dropna()
         else:
-            return df.dropna()
+            return self.df.dropna()
 
     def describe_df(self):
         """
@@ -339,7 +321,7 @@ class DataAnalytics:
         | 2023-04-01 |     22 |
         | 2023-04-02 |      4 |
         """
-        return self.df.iloc[:, 0].describe(percentiles=[.001, .01, .05, .1, .15, .25, .5, .75, .85, .9, .95, .99, .999]).round(2).reset_index()
+        return self.df.iloc[:, 1].describe(percentiles=[.001, .01, .05, .1, .15, .25, .5, .75, .85, .9, .95, .99, .999]).round(2).reset_index()
 
     def describe_df_forecast(self, input_value):
         """
