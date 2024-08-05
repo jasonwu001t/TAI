@@ -11,6 +11,54 @@ class DataAnalytics:
     def __init__(self):
         pass
 
+    def process_daily_data(df, fill_missing=False, fill_method='ffill', use_first=True):
+        # Ensure there is at least one column
+        if df.shape[1] < 2:
+            raise ValueError("DataFrame must have at least two columns: date and value.")
+        
+        # Convert the first column to datetime and set as index
+        date_column = df.columns[0]
+        value_column = df.columns[1]
+        df[date_column] = pd.to_datetime(df[date_column])
+        df.set_index(date_column, inplace=True)
+
+        if fill_missing:
+            # Fill missing dates if required
+            df = df.asfreq('D', method=fill_method)
+
+        # Group by month and calculate monthly percentage change
+        monthly_data = df.resample('M').apply(lambda x: x.iloc[0] if use_first else x.iloc[-1])
+        monthly_data['pct_change'] = monthly_data[value_column].pct_change()
+
+        # Calculate monthly average value
+        monthly_average = df.resample('M').mean()
+        monthly_data['monthly_average'] = monthly_average[value_column]
+
+        return df.reset_index(), monthly_data.reset_index()
+        """
+        # Sample usage
+        data = {'date': ['2024-08-01', '2024-08-02', '2024-08-05'], 'value': [100, 102, 104]}
+        df = pd.DataFrame(data)
+
+        # Process data without filling missing dates
+        daily_data, monthly_data = process_daily_data(df, fill_missing=False, use_first=True)
+
+        print("Daily Data (without filling missing dates):")
+        print(daily_data)
+
+        print("\nMonthly Data with Percentage Change and Average (without filling missing dates):")
+        print(monthly_data)
+
+        # Process data with filling missing dates
+        daily_data_filled, monthly_data_filled = process_daily_data(df, fill_missing=True, fill_method='ffill', use_first=True)
+
+        print("\nDaily Data (with filling missing dates):")
+        print(daily_data_filled)
+
+        print("\nMonthly Data with Percentage Change and Average (with filling missing dates):")
+        print(monthly_data_filled)
+        """
+
     @staticmethod
     def get_pct_weights(df):
         """

@@ -7,12 +7,12 @@ class QuickPlot:
     def __init__(self):
         pass
 
-    def plot_line(self, df, labels=None, title="Line Plot"):
+    def plot_lines(self, dfs, labels=None, title="Line Plot"):
         if labels is None:
-            labels = [f"Series {i+1}" for i in range(len(df))]
+            labels = [f"Series {i+1}" for i in range(len(dfs))]
         color_sequence = px.colors.qualitative.Plotly  # Use Plotly's default qualitative color sequence
         fig = go.Figure()
-        for i, (df_single, label) in enumerate(zip(df, labels)):
+        for i, (df_single, label) in enumerate(zip(dfs, labels)):
             fig.add_trace(go.Scatter(x=df_single.iloc[:, 0], y=df_single.iloc[:, 1], mode='lines', name=label, line=dict(color=color_sequence[i % len(color_sequence)])))
         fig.update_layout(title=title, xaxis_title='Date', yaxis_title='Value')
         fig.update_xaxes(rangeslider=dict(visible=True), showgrid=False, tickformat='%b %Y')
@@ -20,16 +20,23 @@ class QuickPlot:
         fig.update_traces(textposition='top center')
         return fig
 
-    def plot_line_with_events(self, df, labels=None, title="Line Plot with Events", events=None):
-        fig = self.plot_line(df, labels=labels, title=title)
-        if events:
-            for event_date, event_name in events.items():
+    def plot_lines_with_events(self, dfs, events_dict=None, labels=None, title="Line Plot with Events"):
+        """ events_dict format
+        events_dict = {
+        '2020-01-10': 'Event A',
+        '2020-02-20': 'Event B',
+        '2020-03-30': 'Event C'
+        }
+        """
+        fig = self.plot_lines(dfs, labels=labels, title=title)
+        if events_dict:
+            for event_date, event_name in events_dict.items():
                 event_date = pd.to_datetime(event_date)  # Convert string to datetime
                 fig.add_vline(x=event_date, line=dict(color='red', width=2, dash='dash'))
-                fig.add_annotation(x=event_date, y=max([df_single.iloc[:, 1].max() for df_single in df]),
+                fig.add_annotation(x=event_date, y=max([df_single.iloc[:, 1].max() for df_single in dfs]),
                                    text=event_name, showarrow=True, arrowhead=1, ax=0, ay=-40)
         return fig
-
+    
     def plot_monthly_heatmap(self, df):
         """Plot a heatmap with annotations of monthly returns.
         DF Input Sample, we have to make sure its already monthly data here (not daily)
@@ -37,6 +44,9 @@ class QuickPlot:
         2020-01-31	4.967142	2020	Jan
         2020-02-29	-1.382643	2020	Feb
         """
+        df['Year'] = df[df.columns[0]].dt.year
+        df['Month'] = df[df.columns[0]].dt.strftime('%b')  # Short month name
+        
         month_order = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
         df['Month'] = pd.Categorical(df['Month'], categories=month_order, ordered=True)
         pivot_table = df.pivot(index='Year', columns='Month', values='value').fillna(0)
@@ -258,7 +268,7 @@ if __name__ == "__main__":
     qp = QuickPlot()
 
     # Plot line, bar, scatter charts
-    fig_line = qp.plot_line(df=[df1, df2], labels=["Series 1", "Series 2"], title="Sample Line Plot")
+    fig_line = qp.plot_lines(dfs=[df1, df2], labels=["Series 1", "Series 2"], title="Sample Line Plot")
     fig_bar = qp.plot_bar(df=[df1, df2], labels=["Series 1", "Series 2"], title="Sample Bar Plot")
     fig_scatter = qp.plot_scatter(df=[df1, df2], labels=["Series 1", "Series 2"], title="Sample Scatter Plot")
 
