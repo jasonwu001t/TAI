@@ -11,14 +11,16 @@ from alpaca.data.requests import (StockBarsRequest,
                                 StockLatestTradeRequest, 
                                 StockLatestQuoteRequest,
                                 OptionBarsRequest, 
+                                OptionTradesRequest,
                                 OptionLatestQuoteRequest,
-                                OptionLatestTradeRequest)
+                                OptionLatestTradeRequest,
+                                )
 from alpaca.data.timeframe import TimeFrame,TimeFrameUnit
 from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import (MarketOrderRequest, GetOrdersRequest,
                                     GetAssetsRequest,GetOptionContractsRequest
                                     )
-from alpaca.trading.enums import OrderSide, TimeInForce
+from alpaca.trading.enums import OrderSide, TimeInForce, AssetStatus
 
 
 class AlpacaAuth:
@@ -50,7 +52,7 @@ class Alpaca:
         self.stock_md_client = auth.get_stock_md_client()
         self.option_md_client = auth.get_option_md_client()
 
-    def option_chain_to_df(res):
+    def option_chain_to_df(self,res):
         option_contracts = []
         for contract in res.option_contracts:
             contract_dict = {
@@ -75,12 +77,57 @@ class Alpaca:
             option_contracts.append(contract_dict)
         df = pd.DataFrame(option_contracts)
         return df
-
-    def get_option_chain(self): # read from example input
+    
+    def get_option_chain(self, symbol_or_symbols,
+                        expiration_date = None, #'2024-08-30'
+                        expiration_date_gte = None,
+                        expiration_date_lte = None,
+                        root_symbol = None,
+                        type = None, #'call' or 'put'
+                        style = None, #'American' or 'Europe'?
+                        strike_price_get = None, # '550.0'
+                        strike_price_lte = None, # '560.0'
+                        limit = None,
+                        page_token = None): 
         """the output is alpaca.trading.models.OptionContractsResponse instead of raw json
          Try quote.prce instead of quote['price']. If you need a raw json access, you can do quote._raw['price']
         """
-        pass
+        underlying_symbols = symbol_or_symbols  # list of symboles
+        req1 = GetOptionContractsRequest(
+                underlying_symbols = underlying_symbols,               # specify underlying symbols
+                status = AssetStatus.ACTIVE,                           # specify asset status: active (default)
+                expiration_date = expiration_date,                                # specify expiration date (specified date + 1 day range)
+                expiration_date_gte = expiration_date_gte,                            # we can pass date object
+                expiration_date_lte = expiration_date_lte,                            # or string (YYYY-MM-DD)
+                root_symbol = root_symbol,                                    # specify root symbol
+                type = type,                                           # specify option type (ContractType.CALL or ContractType.PUT)
+                style = style,                                          # specify option style (ContractStyle.AMERICAN or ContractStyle.EUROPEAN)
+                strike_price_gte = strike_price_get,                               # specify strike price range
+                strike_price_lte = strike_price_lte,                               # specify strike price range
+                limit = limit,                                             # specify limit
+                page_token = page_token,                                     # specify page token
+                )
+        res1 = self.trade_client.get_option_contracts(req1)
+        res_df1 = self.option_chain_to_df(res1)
+        
+        if res1.next_page_token is not None:
+            req2 = GetOptionContractsRequest(
+                underlying_symbols = underlying_symbols,               # specify underlying symbols
+                status = AssetStatus.ACTIVE,                           # specify asset status: active (default)
+                expiration_date = expiration_date,                                # specify expiration date (specified date + 1 day range)
+                expiration_date_gte = expiration_date_gte,                            # we can pass date object
+                expiration_date_lte = expiration_date_lte,                            # or string (YYYY-MM-DD)
+                root_symbol = root_symbol,                                    # specify root symbol
+                type = type,                                           # specify option type (ContractType.CALL or ContractType.PUT)
+                style = style,                                          # specify option style (ContractStyle.AMERICAN or ContractStyle.EUROPEAN)
+                strike_price_gte = strike_price_get,                               # specify strike price range
+                strike_price_lte = strike_price_lte,                               # specify strike price range
+                limit = limit,                                             # specify limit
+                page_token = self.res1.next_page_token,                      # specify page token
+            )
+        res2 = self.trade_client.get_option_contracts(req2)
+        res_df2 = self.option_chain_to_df(res2)
+        # Union res_df1 and res_df2
 
     def get_last_quote(self, symbol, asset='stock'): #bid,ask, mid?
         if asset == 'stock':
@@ -103,17 +150,27 @@ class Alpaca:
             )
             return self.option_md_client.get_option_latest_trade(req)
 
-    def get_option_historical_bars(self, symbol): #for the same contract at different historical date
-        # get options historical bars by symbol
-        req = OptionBarsRequest(
-            symbol_or_symbols = symbol,
-            timeframe = TimeFrame(amount = 1, unit = TimeFrameUnit.Hour),   # specify timeframe
-            start = self.now - timedelta(days = 5),                              # specify start datetime, default=the beginning of the current day.
-            # end_date=None,                                                # specify end datetime, default=now
-            limit = 2,                                                      # specify limit
-        )
-        result = self.option_md_client.get_option_bars(req).df
-        return result
+    def get_option_historical(self, symbol,bars_or_trades='bars'): #for the same contract at different historical date
+        if bars_or_trades == 'bars': # get options historical bars by symbol
+            req = OptionBarsRequest(
+                symbol_or_symbols = symbol,
+                timeframe = TimeFrame(amount = 1, unit = TimeFrameUnit.Hour),   # specify timeframe
+                start = self.now - timedelta(days = 5),    #data starts 5 days ago  # specify start datetime, default=the beginning of the current day.
+                # end_date=None,                                                # specify end datetime, default=now
+                limit = None,                                                      # specify limit
+            )
+            result = self.option_md_client.get_option_bars(req).df
+            return result
+        
+        if bars_or_trades =='trades': # get options historical trades by symbol
+            req = OptionTradesRequest(
+                symbol_or_symbols = symbol,
+                start = self.now - timedelta(days = 5),                              # specify start datetime, default=the beginning of the current day.
+                # end=None,                                                     # specify end datetime, default=now
+                limit = None,                                                      # specify limit
+                )
+            result = self.option_md_client.get_option_trades(req).df
+            return result
 
     # Account Handler
     def get_account(self): #result in json includes current equity value, buying power, 

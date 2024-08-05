@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 
-class QuickPlot:
+class QuickPlot: # by default, qp=QuickPlot([df])
     def __init__(self, dataframes, labels=None):
         self.dataframes = dataframes
         self.labels = labels if labels else [f"Series {i+1}" for i in range(len(dataframes))]
@@ -39,7 +39,6 @@ class QuickPlot:
                 fig.add_vline(x=event_date, line=dict(color='red', width=2, dash='dash'))
                 fig.add_annotation(x=event_date, y=max([df.iloc[:, 1].max() for df in self.dataframes]),
                                    text=event_name, showarrow=True, arrowhead=1, ax=0, ay=-40)
-
         return fig
     
     def plot_monthly_heatmap(self, df):
