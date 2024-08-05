@@ -1,4 +1,3 @@
-# data_analytics.py
 import pandas as pd
 import numpy as np
 from scipy.stats import linregress
@@ -9,25 +8,15 @@ import logging
 logging.basicConfig(level=logging.INFO)
 
 class DataAnalytics:
-    def __init__(self, df, ts=True):
-        """
-        Initialize the DataAnalytics class with a DataFrame.
-        
-        :param df: DataFrame with at least two columns: date/datetime and a numerical column.
-        """
-        if ts == True: #apply to time series data only
-            self.date_column = df.columns[0]
-            self.value_column = df.columns[1]
-            df[self.date_column] = pd.to_datetime(df[self.date_column])
-            # df.set_index(date_column, inplace=True)
-            self.df = df.copy()
-        else:
-            self.df =df.copy()
+    def __init__(self):
+        pass
 
-    def get_pct_weights(self): #works
+    @staticmethod
+    def get_pct_weights(df):
         """
         Calculate percentage weights of numerical columns.
         
+        :param df: DataFrame with at least two columns: date/datetime and numerical columns.
         :return: DataFrame with percentage weights of each column.
         
         Input sample:
@@ -36,18 +25,21 @@ class DataAnalytics:
         | 2023-04-01 |     22 |     43 |
         | 2023-04-02 |      4 |     12 |
         """
-        self.df.set_index(self.date_column,inplace=True)
-        non_date_columns = self.df.columns
-        self.df['row_sum'] = self.df[non_date_columns].sum(axis=1)
+        date_column = df.columns[0]
+        df.set_index(date_column, inplace=True)
+        non_date_columns = df.columns
+        df['row_sum'] = df[non_date_columns].sum(axis=1)
         for column in non_date_columns:
-            self.df[f'{column}_pct'] = (self.df[column] / self.df['row_sum']) * 100
-        df_pct = self.df[[f'{column}_pct' for column in non_date_columns]].reset_index() #only show the _pct columns
+            df[f'{column}_pct'] = (df[column] / df['row_sum']) * 100
+        df_pct = df[[f'{column}_pct' for column in non_date_columns]].reset_index()  # only show the _pct columns
         return df_pct.round(2)
 
-    def filter_period(self, period='Q'):  #works, period= Q or A for yearly
+    @staticmethod
+    def filter_period(df, period='Q'):
         """
         Filter data to show only the last non-null value of each period.
         
+        :param df: DataFrame with at least two columns: date/datetime and a numerical column.
         :param period: Resampling period, 'Q' for quarterly, 'A' for yearly.
         :return: DataFrame with resampled data.
         
@@ -57,22 +49,22 @@ class DataAnalytics:
         | 2023-01-01 |     22 |     43 |
         | 2023-04-01 |      4 |     12 |
         """
-        # date_column = df.columns[0]
-        # df[date_column] = pd.to_datetime(df[date_column])
-        # df.set_index(date_column, inplace=True)
+        date_column = df.columns[0]
+        df[date_column] = pd.to_datetime(df[date_column])
+        df.set_index(date_column, inplace=True)
 
         def last_non_null(s):
             return s.dropna().iloc[-1]
         
-        self.df.set_index(self.date_column,inplace=True)
-        period_data = self.df.resample(period).agg(last_non_null)
+        period_data = df.resample(period).agg(last_non_null)
         period_data.reset_index(inplace=True)
 
         period_label = "quarter" if period == 'Q' else "year"
-        period_data[period_label] = period_data[self.date_column].dt.to_period(period).astype(str)
+        period_data[period_label] = period_data[date_column].dt.to_period(period).astype(str)
         return period_data
 
-    def calculate_category_weights(self): #works
+    @staticmethod
+    def calculate_category_weights(df):
         """
         Calculate the percentage weight for each category for each datetime.
         
@@ -92,11 +84,11 @@ class DataAnalytics:
     	2023-04-02	B	250	62.500000
     	2023-04-03	A	300	100.000000
         """
-        total = self.df.groupby(self.df.columns[0])[self.df.columns[2]].transform('sum')
+        total = df.groupby(df.columns[0])[df.columns[2]].transform('sum')
         # Calculate percentage
-        self.df['percentage'] = (self.df['value'] / total) * 100
+        df['percentage'] = (df['value'] / total) * 100
         
-        return self.df
+        return df
     
     @staticmethod
     def dummy_value():
@@ -162,10 +154,12 @@ class DataAnalytics:
         else:
             return df[[col1, col2]].cov().iloc[0, 1]
 
-    def correlation_coefficient(self, col1, col2, window=None):
+    @staticmethod
+    def correlation_coefficient(df, col1, col2, window=None):
         """
         Calculate correlation coefficient between two columns.
         
+        :param df: DataFrame containing the data.
         :param col1: First column name.
         :param col2: Second column name.
         :param window: Rolling window size.
@@ -178,14 +172,16 @@ class DataAnalytics:
         | 2023-04-02 |      4 |     12 |
         """
         if window is not None:
-            return self.df[[col1, col2]].rolling(window=window).corr().iloc[::window].iloc[:, 1].values
+            return df[[col1, col2]].rolling(window=window).corr().iloc[::window].iloc[:, 1].values
         else:
-            return self.df[[col1, col2]].corr().iloc[0, 1]
+            return df[[col1, col2]].corr().iloc[0, 1]
 
-    def pvalue(self, col1, col2):
+    @staticmethod
+    def pvalue(df, col1, col2):
         """
         Calculate p-value for cointegration test between two columns.
         
+        :param df: DataFrame containing the data.
         :param col1: First column name.
         :param col2: Second column name.
         :return: P-value.
@@ -196,15 +192,17 @@ class DataAnalytics:
         | 2023-04-01 |     22 |     43 |
         | 2023-04-02 |      4 |     12 |
         """
-        S1 = self.df[col1]
-        S2 = self.df[col2]
+        S1 = df[col1]
+        S2 = df[col2]
         score, pvalues, _ = coint(S1, S2)
         return pvalues
 
-    def coefficient_of_variation(self, col, window=None):
+    @staticmethod
+    def coefficient_of_variation(df, col, window=None):
         """
         Calculate coefficient of variation for a column.
         
+        :param df: DataFrame containing the data.
         :param col: Column name.
         :param window: Rolling window size.
         :return: Coefficient of variation value or array of values.
@@ -216,18 +214,20 @@ class DataAnalytics:
         | 2023-04-02 |      4 |
         """
         if window is not None:
-            mean = self.df[col].rolling(window=window).mean()
-            std_dev = self.df[col].rolling(window=window).std()
+            mean = df[col].rolling(window=window).mean()
+            std_dev = df[col].rolling(window=window).std()
             return (std_dev / mean).values
         else:
-            mean = self.df[col].mean()
-            std_dev = self.df[col].std()
+            mean = df[col].mean()
+            std_dev = df[col].std()
             return std_dev / mean
 
-    def z_score(self, col, value, window=None):
+    @staticmethod
+    def z_score(df, col, value, window=None):
         """
         Calculate z-score for a value in a column.
         
+        :param df: DataFrame containing the data.
         :param col: Column name.
         :param value: Value to calculate z-score for.
         :param window: Rolling window size.
@@ -240,27 +240,28 @@ class DataAnalytics:
         | 2023-04-02 |      4 |
         """
         if window is not None:
-            mean = self.df[col].rolling(window=window).mean()
-            std_dev = self.df[col].rolling(window=window).std()
+            mean = df[col].rolling(window=window).mean()
+            std_dev = df[col].rolling(window=window).std()
             return ((value - mean) / std_dev).values
         else:
-            mean = self.df[col].mean()
-            std_dev = self.df[col].std()
+            mean = df[col].mean()
+            std_dev = df[col].std()
             return (value - mean) / std_dev
 
-    def add_slope_column(self, window):
+    @staticmethod
+    def add_slope_column(df, window):  #Does not work, need to fix
         """
         Add a column with slope values calculated over a rolling window.
         
+        :param df: DataFrame with at least two columns: date/datetime and a numerical column.
         :param window: Rolling window size.
-        :return: DataFrame with date, value, and slope columns.
+        :return: DataFrame with date and slope columns.
         """
-        df = self.df.copy()
-        df['date_ordinal'] = pd.to_datetime(df['date']).apply(lambda x: x.toordinal())
-        
+        df['date_ordinal'] = pd.to_datetime(df[df.columns[0]]).apply(lambda x: x.toordinal())
+        print (df)
         slopes = []
         for i in range(len(df) - window + 1):
-            y = df['value'].iloc[i:i + window]
+            y = df[df.columns[1]].iloc[i:i + window]
             x = df['date_ordinal'].iloc[i:i + window]
             slope, _, _, _, _ = linregress(x, y)
             slopes.append(slope)
@@ -269,9 +270,10 @@ class DataAnalytics:
         df['slope'] = slopes
         df.drop(columns=['date_ordinal'], inplace=True)  # Clean up the temporary column
 
-        return df[['date', 'slope']]
+        return df[[df.columns[0], 'slope']]
 
-    def get_slope(self):
+    @staticmethod
+    def get_slope(df):
         """
         Calculate slope and intercept for a column.
         
@@ -283,15 +285,17 @@ class DataAnalytics:
         | 2023-04-01 |     22 |
         | 2023-04-02 |      4 |
         """
-        df = self.df.copy()
+        df.set_index(df.columns[0])
         df['date_ordinal'] = df.index.map(datetime.datetime.toordinal)
         slope, intercept, _, _, _ = linregress(df['date_ordinal'], df.iloc[:, 0])
         return slope, intercept
 
-    def perc_change(self, horizon, keep_only_perc_change=True):
+    @staticmethod
+    def perc_change(df, horizon, keep_only_perc_change=True):
         """
         Calculate percentage change over a horizon.
         
+        :param df: DataFrame with at least two columns: date/datetime and a numerical column.
         :param horizon: Number of periods to calculate percentage change over.
         :param keep_only_perc_change: If True, keep only percentage change column.
         :return: DataFrame with percentage change.
@@ -303,16 +307,18 @@ class DataAnalytics:
         | 2023-04-02 |      4 |
         """
         horizon = horizon - 1
-        self.df['perc_change'] = self.df.iloc[:, 0].pct_change(periods=horizon, fill_method='ffill').round(decimals=4)
+        df['perc_change'] = df.iloc[:, 0].pct_change(periods=horizon, fill_method='ffill').round(decimals=4)
         if keep_only_perc_change:
-            return self.df.drop(self.df.columns[0], axis=1).dropna()
+            return df.drop(df.columns[0], axis=1).dropna()
         else:
-            return self.df.dropna()
+            return df.dropna()
 
-    def describe_df(self):
+    @staticmethod
+    def describe_df(df):
         """
         Describe the DataFrame, including percentiles.
         
+        :param df: DataFrame with at least two columns: date/datetime and a numerical column.
         :return: DataFrame with descriptive statistics.
         
         Input sample:
@@ -321,12 +327,14 @@ class DataAnalytics:
         | 2023-04-01 |     22 |
         | 2023-04-02 |      4 |
         """
-        return self.df.iloc[:, 1].describe(percentiles=[.001, .01, .05, .1, .15, .25, .5, .75, .85, .9, .95, .99, .999]).round(2).reset_index()
+        return df.iloc[:, 1].describe(percentiles=[.001, .01, .05, .1, .15, .25, .5, .75, .85, .9, .95, .99, .999]).round(2).reset_index()
 
-    def describe_df_forecast(self, input_value):
+    @staticmethod
+    def describe_df_forecast(df, input_value):
         """
         Describe the DataFrame and forecast values based on input value.
         
+        :param df: DataFrame with at least two columns: date/datetime and a numerical column.
         :param input_value: Input value to forecast based on descriptive statistics.
         :return: DataFrame with forecast values.
         
@@ -336,48 +344,107 @@ class DataAnalytics:
         | 2023-04-01 |     22 |
         | 2023-04-02 |      4 |
         """
-        describe = self.describe_df()
+        describe = DataAnalytics.describe_df(df)
         describe['input_value'] = input_value
         describe['forecast_value'] = input_value * (1 + describe.iloc[:, 1] / 100).round(3)
         return describe
 
 # Example usage in __main__ section
 if __name__ == "__main__":
+    from GTI.analytics.plotly_plots import QuickPlot
+
     # Dummy data
-    data = {
-        'date_time': ['2023-04-01', '2023-04-02', '2023-04-03', '2023-04-04', '2023-04-05'],
-        'value1': [22, 4, 6, 82, 10],
-        'value2': [43, 12, 56, 12, 44]
+    data1 = {
+        'date': pd.date_range(start='1/1/2020', periods=100),
+        'value': np.random.rand(100)
     }
-    df = pd.DataFrame(data)
+    data2 = {
+        'date': pd.date_range(start='1/1/2020', periods=100),
+        'value': np.random.rand(100) * 2
+    }
+    df1 = pd.DataFrame(data1)
+    df2 = pd.DataFrame(data2)
 
-    # Instantiate the DataAnalytics class
-    processor = DataAnalytics(df)
+    # Initialize DataAnalytics
+    processor = DataAnalytics()
 
-    # Test the methods
+    # Test the methods in DataAnalytics
     print("Correlation coefficient without window:")
-    print(processor.correlation_coefficient(col1='value1', col2='value2'))
+    print(DataAnalytics.correlation_coefficient(df1, col1='value', col2='value'))
 
     print("\nP-value:")
-    print(processor.pvalue(col1='value1', col2='value2'))
+    print(DataAnalytics.pvalue(df1, col1='value', col2='value'))
 
     print("\nCoefficient of variation without window:")
-    print(processor.coefficient_of_variation(col='value1'))
+    print(DataAnalytics.coefficient_of_variation(df1, col='value'))
 
     print("\nZ-score without window:")
-    print(processor.z_score(col='value1', value=50))
+    print(DataAnalytics.z_score(df1, col='value', value=0.5))
 
     print("\nAdd slope column with window=3:")
-    print(processor.add_slope_column(window=3))
+    print(DataAnalytics.add_slope_column(df1, window=3))
 
     print("\nGet slope:")
-    print(processor.get_slope())
+    print(DataAnalytics.get_slope(df1))
 
     print("\nPercentage change with horizon=3:")
-    print(processor.perc_change(horizon=3, keep_only_perc_change=True))
+    print(DataAnalytics.perc_change(df1, horizon=3, keep_only_perc_change=True))
 
     print("\nDescribe DataFrame:")
-    print(processor.describe_df())
+    print(DataAnalytics.describe_df(df1))
 
     print("\nDescribe DataFrame forecast with input value=100:")
-    print(processor.describe_df_forecast(input_value=50))
+    print(DataAnalytics.describe_df_forecast(df1, input_value=50))
+
+    # Initialize QuickPlot
+    qp = QuickPlot()
+
+    # Test the methods in QuickPlot
+    # Plot line
+    fig_line = qp.plot_line([df1, df2], labels=["Series 1", "Series 2"], title="Sample Line Plot")
+    fig_line.show()
+
+    # Plot line with events
+    events = {
+        '2020-01-10': 'Event A',
+        '2020-02-20': 'Event B',
+        '2020-03-30': 'Event C'
+    }
+    fig_line_with_events = qp.plot_line_with_events([df1, df2], labels=["Series 1", "Series 2"], title="Line Plot with Events", events=events)
+    fig_line_with_events.show()
+
+    # Plot monthly heatmap
+    def create_sample_data():
+        np.random.seed(42)
+        date_rng = pd.date_range(start='2020-01-01', end='2024-12-31', freq='M')
+        values = np.random.randn(len(date_rng)) * 10  # Random returns
+        df = pd.DataFrame({'date': date_rng, 'value': values})
+        df['Year'] = df['date'].dt.year
+        df['Month'] = df['date'].dt.strftime('%b')
+        return df
+    
+    df_monthly = create_sample_data()
+    qp.plot_monthly_heatmap(df_monthly)
+
+    # Plot interest rates
+    rates_data = {
+        'Today': df1,
+        'Last Week': df2,
+        'Last Month': df1,
+        'Last 3 Months': df2,
+        'Last Year': df1
+    }
+    fig_rates = qp.plot_interest_rates(rates_data)
+    fig_rates.show()
+
+    # Plot bar
+    fig_bar = qp.plot_bar([df1, df2], labels=["Series 1", "Series 2"], title="Sample Bar Plot")
+    fig_bar.show()
+
+    # Plot scatter
+    fig_scatter = qp.plot_scatter([df1, df2], labels=["Series 1", "Series 2"], title="Sample Scatter Plot")
+    fig_scatter.show()
+
+    # Prepare custom figure
+    fig_custom = qp.prepare_figure(df1, title="Sample Custom Plot")
+    fig_custom.show()

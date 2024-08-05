@@ -2,45 +2,34 @@ import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
 import numpy as np
-from datetime import datetime
 
-class QuickPlot: # by default, qp=QuickPlot([df])
-    def __init__(self, dataframes, labels=None):
-        self.dataframes = dataframes
-        self.labels = labels if labels else [f"Series {i+1}" for i in range(len(dataframes))]
-        self._validate_input()
+class QuickPlot:
+    def __init__(self):
+        pass
 
-    def _validate_input(self):
-        if not isinstance(self.dataframes, list) or not all(isinstance(df, pd.DataFrame) for df in self.dataframes):
-            raise ValueError("dataframes should be a list of pandas DataFrames.")
-        if not all(len(df.columns) >= 2 for df in self.dataframes):
-            raise ValueError("Each DataFrame should contain at least two columns.")
-        if len(self.labels) != len(self.dataframes):
-            raise ValueError("The number of labels should match the number of dataframes.")
-
-    def plot_line(self, title="Line Plot"):
-        fig = go.Figure()
+    def plot_line(self, df, labels=None, title="Line Plot"):
+        if labels is None:
+            labels = [f"Series {i+1}" for i in range(len(df))]
         color_sequence = px.colors.qualitative.Plotly  # Use Plotly's default qualitative color sequence
-        for i, (df, label) in enumerate(zip(self.dataframes, self.labels)):
-            fig.add_trace(go.Scatter(x=df.iloc[:, 0], y=df.iloc[:, 1], mode='lines', name=label, line=dict(color=color_sequence[i % len(color_sequence)])))
-
+        fig = go.Figure()
+        for i, (df_single, label) in enumerate(zip(df, labels)):
+            fig.add_trace(go.Scatter(x=df_single.iloc[:, 0], y=df_single.iloc[:, 1], mode='lines', name=label, line=dict(color=color_sequence[i % len(color_sequence)])))
         fig.update_layout(title=title, xaxis_title='Date', yaxis_title='Value')
         fig.update_xaxes(rangeslider=dict(visible=True), showgrid=False, tickformat='%b %Y')
         fig.update_yaxes(showgrid=False)
         fig.update_traces(textposition='top center')
         return fig
 
-    def plot_line_with_events(self, title="Line Plot with Events", events=None):
-        fig = self.plot_line(title=title)
-
+    def plot_line_with_events(self, df, labels=None, title="Line Plot with Events", events=None):
+        fig = self.plot_line(df, labels=labels, title=title)
         if events:
             for event_date, event_name in events.items():
                 event_date = pd.to_datetime(event_date)  # Convert string to datetime
                 fig.add_vline(x=event_date, line=dict(color='red', width=2, dash='dash'))
-                fig.add_annotation(x=event_date, y=max([df.iloc[:, 1].max() for df in self.dataframes]),
+                fig.add_annotation(x=event_date, y=max([df_single.iloc[:, 1].max() for df_single in df]),
                                    text=event_name, showarrow=True, arrowhead=1, ax=0, ay=-40)
         return fig
-    
+
     def plot_monthly_heatmap(self, df):
         """Plot a heatmap with annotations of monthly returns.
         DF Input Sample, we have to make sure its already monthly data here (not daily)
@@ -101,17 +90,21 @@ class QuickPlot: # by default, qp=QuickPlot([df])
 
         return fig
 
-    def plot_bar(self, title="Bar Plot", x='date', y='value', **layout_kwargs):
+    def plot_bar(self, df, labels=None, title="Bar Plot", x='date', y='value', **layout_kwargs):
+        if labels is None:
+            labels = [f"Series {i+1}" for i in range(len(df))]
         fig = go.Figure()
-        for df, label in zip(self.dataframes, self.labels):
-            fig.add_trace(go.Bar(x=df[x], y=df[y], name=label))
+        for df_single, label in zip(df, labels):
+            fig.add_trace(go.Bar(x=df_single[x], y=df_single[y], name=label))
         fig.update_layout(title=title, xaxis_title=x, yaxis_title=y, **layout_kwargs)
         return fig
 
-    def plot_scatter(self, title="Scatter Plot", x='date', y='value', **layout_kwargs):
+    def plot_scatter(self, df, labels=None, title="Scatter Plot", x='date', y='value', **layout_kwargs):
+        if labels is None:
+            labels = [f"Series {i+1}" for i in range(len(df))]
         fig = go.Figure()
-        for df, label in zip(self.dataframes, self.labels):
-            fig.add_trace(go.Scatter(x=df[x], y=df[y], mode='markers', name=label))
+        for df_single, label in zip(df, labels):
+            fig.add_trace(go.Scatter(x=df_single[x], y=df_single[y], mode='markers', name=label))
         fig.update_layout(title=title, xaxis_title=x, yaxis_title=y, **layout_kwargs)
         return fig
 
@@ -247,9 +240,7 @@ class QuickPlot: # by default, qp=QuickPlot([df])
             ]
         )
         return fig
-    
 
-# Example usage
 if __name__ == "__main__":
     # Sample data for demonstration
     data1 = {
@@ -263,13 +254,13 @@ if __name__ == "__main__":
     df1 = pd.DataFrame(data1)
     df2 = pd.DataFrame(data2)
 
-    # Initialize QuickPlot with dataframes
-    qp = QuickPlot(dataframes=[df1, df2], labels=["Series 1", "Series 2"])
+    # Initialize QuickPlot
+    qp = QuickPlot()
 
     # Plot line, bar, scatter charts
-    fig_line = qp.plot_line(title="Sample Line Plot")
-    fig_bar = qp.plot_bar(title="Sample Bar Plot")
-    fig_scatter = qp.plot_scatter(title="Sample Scatter Plot")
+    fig_line = qp.plot_line(df=[df1, df2], labels=["Series 1", "Series 2"], title="Sample Line Plot")
+    fig_bar = qp.plot_bar(df=[df1, df2], labels=["Series 1", "Series 2"], title="Sample Bar Plot")
+    fig_scatter = qp.plot_scatter(df=[df1, df2], labels=["Series 1", "Series 2"], title="Sample Scatter Plot")
 
     fig_line.show()
     fig_bar.show()
@@ -281,7 +272,7 @@ if __name__ == "__main__":
         '2020-02-20': 'Event B',
         '2020-03-30': 'Event C'
     }
-    fig_line_with_events = qp.plot_line_with_events(title="Line Plot with Events", events=events)
+    fig_line_with_events = qp.plot_line_with_events(df=[df1, df2], labels=["Series 1", "Series 2"], title="Line Plot with Events", events=events)
     fig_line_with_events.show()
 
     # Prepare a specific figure similar to the plotter.py example
