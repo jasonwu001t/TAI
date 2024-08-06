@@ -7,7 +7,7 @@ import boto3
 from botocore.exceptions import NoCredentialsError
 import psycopg2
 import logging
-
+from 
 logging.basicConfig(level=logging.INFO)
 
 class RedshiftAuth:
@@ -29,8 +29,8 @@ class Redshift:
         self.auth = RedshiftAuth()
         self.conn = self.auth.get_connection()
         self.use_connection_pooling = use_connection_pooling
-
-    def run_query(self, query):
+    
+    def run_sql(self, query):
         cursor = self.conn.cursor()
         cursor.execute(query)
         columns = [desc[0] for desc in cursor.description]
@@ -40,26 +40,31 @@ class Redshift:
             self.conn.close()
         return pd.DataFrame(rows, columns=columns)
 
-    def read_query(self, query):
-        return self.run_query(query)
-
-    def write_query(self, query):
-        cursor = self.conn.cursor()
-        cursor.execute(query)
-        self.conn.commit()
-        cursor.close()
-        if not self.use_connection_pooling:
-            self.conn.close()
-
 class DataMaster:
-    def __init__(self, base_dir="data", aws_session=None):
-        self.base_dir = base_dir
-        self.s3_client = aws_session.client('s3') if aws_session else None
+    def __init__(self):
+        pass
+    
+    def run_sql_cache(self, csv_path, query, refresh=False): #check if csv is exist, read the csv instead of running the query
+        if refresh==True:
+            return Redshift.run_sql(query).to_csv(csv_path, header=True, index=False)
+        else:
+            if os.path.exists(csv_path): 
+                df = pd.read_csv(csv_path)
+            else:
+                df = Redshift.run_sql(query)
+                df.to_csv(csv_path, header=True, index=False)
+                return df
+    
+    def set_base_dir(base_dir="data"):
+        return base_dir
 
-    def save_data(self, dataframes, file_format="parquet"):
+    def set_s3_client(aws_session=None):
+        return aws_session.client('s3') if aws_session else None
+
+    def save_data(self, dataframes, base_dir="data", file_format="parquet"):
         today = datetime.now()
         year, month, day = today.year, today.month, today.day
-        dir_path = os.path.join(self.base_dir, f"{year}", f"{month:02d}", f"{day:02d}")
+        dir_path = os.path.join(base_dir, f"{year}", f"{month:02d}", f"{day:02d}")
         os.makedirs(dir_path, exist_ok=True)
 
         for df_name, df in dataframes.items():
@@ -78,22 +83,25 @@ class DataMaster:
         elif file_format == 'parquet':
             return pd.read_parquet(file_path)
 
-    def save_to_s3(self, bucket_name, object_name, data):
+    def save_to_s3(self, bucket_name, object_name, data, aws_session=None):
+        s3_client = self.set_s3_client(aws_session)
         try:
-            self.s3_client.put_object(Bucket=bucket_name, Key=object_name, Body=data)
+            s3_client.put_object(Bucket=bucket_name, Key=object_name, Body=data)
             logging.info(f"File {object_name} uploaded to {bucket_name}")
         except NoCredentialsError:
             logging.error("Credentials not available")
 
-    def load_from_s3(self, bucket_name, file_key, file_format):
+    def load_from_s3(self, bucket_name, file_key, file_format, aws_session=None):
+        s3_client = self.set_s3_client(aws_session)
         try:
-            obj = self.s3_client.get_object(Bucket=bucket_name, Key=file_key)
+            obj = s3_client.get_object(Bucket=bucket_name, Key=file_key)
             if file_format == 'csv':
                 return pd.read_csv(obj['Body'])
             elif file_format == 'parquet':
                 return pd.read_parquet(obj['Body'])
         except Exception as e:
             logging.error(f"Error loading from S3: {e}")
+
 
 # Example usage:
 if __name__ == "__main__":

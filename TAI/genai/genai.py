@@ -15,11 +15,11 @@ class AWSBedrock:
         self.available_models = self.list_available_models()
         self.active_models = self.get_active_models()
             
-    def list_available_models (self) :
-        return self.bedrock.list_foundation_models ()['modelSummaries']
+    def list_available_models(self) :
+        return self.bedrock.list_foundation_models()['modelSummaries']
     
-    def get_active_models (self) :
-        active_models = ()
+    def get_active_models(self) :
+        active_models = {}
         for model in self.available_models:
             if model.get('modelLifecycle')['status'] == 'ACTIVE':
                 active_models [model. get('modelId')] = model
