@@ -29,7 +29,8 @@ setup(
         'streamlit',
         'fastapi',
         'langchain-core',
-        'langchain_aws'
+        'langchain_aws',
+        'slack_bolt'
     ],
     classifiers=[
         "Programming Language :: Python :: 3",

@@ -1,56 +1,47 @@
-import requests
-import json
+import os
+from slack_bolt import App
+from slack_bolt.adapter.socket_mode import SocketModeHandler
+import pandas as pd
 
 class SlackApp:
-    def __init__(self, webhook_url, bot_token, channel_id):
-        self.webhook_url = webhook_url
-        self.bot_token = bot_token
-        self.channel_id = channel_id
+    def __init__(self, bot_token, app_token):
+        self.app = App(token=bot_token)
+        self.app_token = app_token
+        self.register_events()
 
-    def send_message(self, message):
-        """
-        Send a message to a Slack channel using the Webhook URL.
+    def register_events(self):
+        # Listens to incoming messages that mention the bot
+        @self.app.event("app_mention")
+        def handle_app_mention_events(body, say):
+            event = body["event"]
+            user_id = event["user"]
+            message_text = event["text"]
+            
+            # Print the message text
+            print(f"Received message: {message_text}")
 
-        :param message: The message to send as a string.
-        :return: Response from the Slack API.
-        """
-        headers = {'Content-Type': 'application/json'}
-        data = json.dumps({'text': message})
-        response = requests.post(self.webhook_url, headers=headers, data=data)
-        return response.json()
+            # Save the message to a variable
+            user_message = message_text
+            
+            # Process the message
+            processed_message = self.process_message(user_message)
+            
+            # Respond to the mention with the processed message
+            say(f"Hello <@{user_id}>, here's your processed message: {processed_message}")
 
-    def read_messages(self, count=10):
-        """
-        Read messages from a Slack channel using the Slack API.
+    def process_message(self, message):
+        # This function processes the user's message and returns a new output
+        # For example, let's reverse the message as a simple processing step
+        return message[::-1]
 
-        :param count: The number of messages to retrieve.
-        :return: List of messages from the Slack channel.
-        """
-        url = 'https://slack.com/api/conversations.history'
-        headers = {'Authorization': f'Bearer {self.bot_token}'}
-        params = {
-            'channel': self.channel_id,
-            'limit': count
-        }
-        response = requests.get(url, headers=headers, params=params)
-        if response.status_code == 200:
-            return response.json().get('messages', [])
-        else:
-            response.raise_for_status()
+    def start(self):
+        handler = SocketModeHandler(self.app, self.app_token)
+        handler.start()
 
-if __name__ == '__main__':
-    # User-defined values
-    webhook_url = 'your_webhook_url_here'
-    bot_token = 'your_bot_token_here'
-    channel_id = 'your_channel_id_here'
+if __name__ == "__main__":
+    # Set your environment variables or replace them with your actual tokens
+    bot_token = os.environ['SLACK_BOT_TOKEN']
+    app_token = os.environ['SLACK_APP_TOKEN']
 
-    slack_handler = SlackApp(webhook_url, bot_token, channel_id)
-
-    # Test sending a message
-    message = "Hello, this is a test message from the GTI library!"
-    send_response = slack_handler.send_message(message)
-    print("Send message response:", send_response)
-
-    # Test reading messages
-    read_response = slack_handler.read_messages(count=5)
-    print("Read messages response:", read_response)
+    slack_app_handler = SlackApp(bot_token, app_token)
+    slack_app_handler.start()

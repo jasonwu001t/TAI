@@ -9,20 +9,20 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_aws import ChatBedrock
 
 class AWSBedrock: 
-    def __init__(self, region_name='us-east-l', endpoint_url='https://bedrock.us-east-1.amazonaws.com'):
+    def __init__(self, region_name='us-east-1', endpoint_url='https://bedrock.us-east-1.amazonaws.com'):
         self.bedrock = boto3.client(service_name='bedrock', region_name=region_name, endpoint_url=endpoint_url)
         self.bedrock_runtime = boto3.client(service_name="bedrock-runtime", region_name="us-west-2")
         self.available_models = self.list_available_models()
         self.active_models = self.get_active_models()
             
-    def list_available_models(self) :
+    def list_available_models(self):
         return self.bedrock.list_foundation_models()['modelSummaries']
     
-    def get_active_models(self) :
+    def get_active_models(self):
         active_models = {}
         for model in self.available_models:
             if model.get('modelLifecycle')['status'] == 'ACTIVE':
-                active_models [model. get('modelId')] = model
+                active_models[model.get('modelId')] = model
         return active_models
     
     def get_model_info(self, model_id):
@@ -42,11 +42,11 @@ class AWSBedrock:
         -   stop_sequences (list): List of stop sequences.
         """
         model_kwargs = {
-            "max_tokens": kwargs.get ("max_tokens", 2048),
-            "temperature": kwargs.get ("temperature", 0.1),
-            "top_k": kwargs.get ("top_k", 250),
-            "top_p": kwargs. get ("top_p", 1),
-            "stop_sequences": kwargs.get ("stop_sequences", ["\n\nHuman"]),
+            "max_tokens": kwargs.get("max_tokens", 2048),
+            "temperature": kwargs.get("temperature", 0.1),
+            "top_k": kwargs.get("top_k", 250),
+            "top_p": kwargs. get("top_p", 1),
+            "stop_sequences": kwargs.get("stop_sequences", ["\n\nHuman"]),
             }
 
         model = ChatBedrock(
@@ -61,7 +61,7 @@ class AWSBedrock:
         ]
 
         prompt = ChatPromptTemplate.from_messages(messages)
-        chain = prompt | model | StrOutputParser ()
+        chain = prompt | model | StrOutputParser()
         response = chain.invoke({"question": prompt})
         return response
 

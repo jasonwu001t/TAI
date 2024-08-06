@@ -7,7 +7,7 @@ import boto3
 from botocore.exceptions import NoCredentialsError
 import psycopg2
 import logging
-from 
+
 logging.basicConfig(level=logging.INFO)
 
 class RedshiftAuth:
