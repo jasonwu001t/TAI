@@ -26,11 +26,13 @@ https://forums.slackcommunity.com/s/question/0D53a00008QI1eiCAD/is-there-a-way-t
 
 """
 
-class SlackAppHandler:
+class SlackApp:
     def __init__(self, bot_token, app_token):
         self.app = App(token=bot_token)
         self.client = WebClient(token=bot_token)
         self.app_token = app_token
+        self.retry_limit = 3
+        self.retry_count = 0
         self.register_events()
 
     def register_events(self):
@@ -105,13 +107,24 @@ class SlackAppHandler:
         )
 
     def start(self):
-        handler = SocketModeHandler(self.app, self.app_token)
-        handler.start()
+        while self.retry_count < self.retry_limit:
+            try:
+                handler = SocketModeHandler(self.app, self.app_token)
+                handler.start()
+                self.retry_count = 0  # Reset retry count after successful start
+                break
+            except Exception as e:
+                print(f"Error starting handler: {e}")
+                self.retry_count += 1
+                if self.retry_count >= self.retry_limit:
+                    print("Failed to start handler after 3 attempts. Terminating.")
+                    break
+                print(f"Retrying... ({self.retry_count}/{self.retry_limit})")
 
 if __name__ == "__main__":
     # Set your environment variables or replace them with your actual tokens
     bot_token = os.environ['SLACK_BOT_TOKEN']
     app_token = os.environ['SLACK_APP_TOKEN']
 
-    slack_app_handler = SlackAppHandler(bot_token, app_token)
+    slack_app_handler = SlackApp(bot_token, app_token)
     slack_app_handler.start()
