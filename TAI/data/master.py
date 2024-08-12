@@ -1,6 +1,6 @@
 # data_master.py
 from TAI.utils import ConfigLoader
-import os
+import os, sys, inspect
 import pandas as pd
 from datetime import datetime
 import boto3
@@ -54,28 +54,68 @@ class DataMaster:
                 df = Redshift.run_sql(query)
                 df.to_csv(csv_path, header=True, index=False)
                 return df
+            
+    def get_current_dir(self):
+        """
+        This function returns the directory of the user's script that is running.
+        """
+        try:  # Adjusting to check if the stack has enough frames
+            if len(inspect.stack()) > 2:
+                # Get the filename of the script that called this function two levels up in the stack
+                caller_file = inspect.stack()[2].filename
+            else:# If the stack isn't deep enough, fallback to the immediate caller
+                caller_file = inspect.stack()[1].filename  # Get the directory of that script
+            current_directory = os.path.dirname(os.path.abspath(caller_file))
+            return current_directory
+        except IndexError: # Fallback: if there's any issue, return the current working directory
+            return os.getcwd()
+
+    def create_dir(self, full_path=None, dir_name="data"): # dir_name = "" to save to the current dir
+        """
+        If full_path is not provided, create a "data" folder (default, but can change) 
+        under the directory where the user's script is run. 
+        The full_path should include the folder name, not a file name.
+        If the folder already exists, it does nothing.
+        """
+        if full_path == None:            # Use current folder as the base path
+            folder_path = os.path.join(self.get_current_dir(), dir_name)
+        else:
+            folder_path == full_path
     
-    def set_base_dir(base_dir="data"):
-        return base_dir
+        if not os.path.exists(folder_path):        # Create the folder if it doesn't exist
+            os.makedirs(folder_path)
+            print(f"Folder created: {folder_path}")
+        else:
+            print(f"Folder already exists: {folder_path}")
+
+    def save_data(self, 
+                df, 
+                file_name,
+                type="parquet",
+                dir_name="data", 
+                how = "in_dir"):
+        # locate the data folder
+        default_path = os.path.join(self.get_current_dir(), dir_name)
+
+        if how =='calendar':
+            today = datetime.now()
+            year, month, day = today.year, today.month, today.day
+            dir_path = os.path.join(dir_name, f"{year}", f"{month:02d}", f"{day:02d}")
+            os.makedirs(dir_path, exist_ok=True)
+        if how =='in_dir':
+            dir_path = default_path
+            # self.create_dir() # NEED FIX, when calling from the library, it will create dir under library folder
+        
+        file_path = os.path.join(dir_path, f"{file_name}.{type}")
+        if type == "parquet":
+            df.to_parquet(file_path)
+        elif type == "csv":
+            df.to_csv(file_path)#, header=True, index=False)
+        else:
+            raise ValueError(f"Unsupported file format: {type}")
 
     def set_s3_client(aws_session=None):
         return aws_session.client('s3') if aws_session else None
-
-    def save_data(self, dataframes, base_dir="data", file_format="parquet"):
-        today = datetime.now()
-        year, month, day = today.year, today.month, today.day
-        dir_path = os.path.join(base_dir, f"{year}", f"{month:02d}", f"{day:02d}")
-        os.makedirs(dir_path, exist_ok=True)
-
-        for df_name, df in dataframes.items():
-            file_path = os.path.join(dir_path, f"{df_name}.{file_format}")
-            if file_format == "parquet":
-                df.to_parquet(file_path)
-            elif file_format == "csv":
-                df.to_csv(file_path, index=False)
-            else:
-                raise ValueError(f"Unsupported file format: {file_format}")
-            logging.info(f"Saved {df_name} to {file_path}")
 
     def load_from_local(self, file_path, file_format):
         if file_format == 'csv':
