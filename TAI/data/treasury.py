@@ -55,7 +55,7 @@ class Treasury:
             print('Failed to update data. Using existing data.')
 
     def load_all_yield(self):
-        historical_rates = pd.read_csv(os.path.join(self.current_dir,'treasury_yield_2020-2023.csv'))
+        historical_rates = pd.read_csv(os.path.join(self.current_dir,'treasury_yield_1990-2023.csv'))
         new_rates = pd.read_csv(os.path.join(self.current_dir,'treasury_yield_{}.csv'.format(datetime.now().year)))
         rates = pd.concat([historical_rates, new_rates])#.sort_values('Date')
         return rates
