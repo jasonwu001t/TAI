@@ -399,8 +399,6 @@ class DataAnalytics:
 
 # Example usage in __main__ section
 if __name__ == "__main__":
-    from GTI.analytics.plotly_plots import QuickPlot
-
     # Dummy data
     data1 = {
         'date': pd.date_range(start='1/1/2020', periods=100),

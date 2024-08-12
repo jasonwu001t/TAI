@@ -1,6 +1,4 @@
 from TAI.data import DataMaster
-import pandas as pd
-
 from TAI.data import Treasury
 
 dm = DataMaster()
