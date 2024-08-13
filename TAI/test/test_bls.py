@@ -1,5 +1,5 @@
 import pytest
-from TAI.data.bls import BLS
+from TAI.source.bls import BLS
 
 def test_bls():
     bls = BLS()

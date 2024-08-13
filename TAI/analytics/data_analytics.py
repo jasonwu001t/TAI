@@ -59,6 +59,37 @@ class DataAnalytics:
         print(monthly_data_filled)
         """
 
+    def calculate_slope(self, df, window=None): # Works, input two columns (date, value), reset_index()
+        """
+        Calculate the slope of the second column in the DataFrame and add it as a new column 'Slope'.
+        If window is specified, calculate the rolling slope. If window is None, calculate the slope for the entire data.
+        
+        Parameters:
+        - data: pd.DataFrame with at least two columns
+        - window: int or None, the size of the rolling window to calculate the slope.
+        
+        Returns:
+        - pd.DataFrame: The original DataFrame with an additional 'Slope' column.
+        """
+        data = df.copy()
+        slope_line = np.full(len(data), np.nan)
+        
+        if window is None: # Calculate the slope over the entire dataset
+            x = np.arange(len(data))
+            y = data.iloc[:, 1]  # Access the second column
+            slope, intercept, _, _, _ = linregress(x, y)
+            slope_line = intercept + slope * x
+        else: # Calculate rolling slope
+            for i in range(window - 1, len(data)):
+                x = np.arange(window)
+                y = data.iloc[i-window+1:i+1, 1]  # Access the second column
+                slope, intercept, _, _, _ = linregress(x, y)
+                slope_line[i] = intercept + slope * (window - 1)
+        
+        data['Slope'] = slope_line # Add the slope line to the DataFrame
+        
+        return data
+
     @staticmethod
     def get_pct_weights(df):
         """
@@ -271,7 +302,7 @@ class DataAnalytics:
             return std_dev / mean
 
     @staticmethod
-    def z_score(df, col, value, window=None):
+    def z_score(self,df, col, value, window=None):
         """
         Calculate z-score for a value in a column.
         
@@ -295,48 +326,6 @@ class DataAnalytics:
             mean = df[col].mean()
             std_dev = df[col].std()
             return (value - mean) / std_dev
-
-    @staticmethod
-    def add_slope_column(df, window):  #Does not work, need to fix
-        """
-        Add a column with slope values calculated over a rolling window.
-        
-        :param df: DataFrame with at least two columns: date/datetime and a numerical column.
-        :param window: Rolling window size.
-        :return: DataFrame with date and slope columns.
-        """
-        df['date_ordinal'] = pd.to_datetime(df[df.columns[0]]).apply(lambda x: x.toordinal())
-        print (df)
-        slopes = []
-        for i in range(len(df) - window + 1):
-            y = df[df.columns[1]].iloc[i:i + window]
-            x = df['date_ordinal'].iloc[i:i + window]
-            slope, _, _, _, _ = linregress(x, y)
-            slopes.append(slope)
-
-        slopes = [None] * (window - 1) + slopes  # Prepend Nones to match the length of the original dataframe
-        df['slope'] = slopes
-        df.drop(columns=['date_ordinal'], inplace=True)  # Clean up the temporary column
-
-        return df[[df.columns[0], 'slope']]
-
-    @staticmethod
-    def get_slope(df):
-        """
-        Calculate slope and intercept for a column.
-        
-        :return: Tuple of slope and intercept.
-        
-        Input sample:
-        | date_time  | value1 |
-        |------------|--------|
-        | 2023-04-01 |     22 |
-        | 2023-04-02 |      4 |
-        """
-        df.set_index(df.columns[0])
-        df['date_ordinal'] = df.index.map(datetime.datetime.toordinal)
-        slope, intercept, _, _, _ = linregress(df['date_ordinal'], df.iloc[:, 0])
-        return slope, intercept
 
     @staticmethod
     def perc_change(df, horizon, keep_only_perc_change=True):

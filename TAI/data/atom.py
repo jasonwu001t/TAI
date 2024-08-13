@@ -7,8 +7,8 @@ Focus on
 
 # atom.py
 import pandas as pd
-from TAI.broker.alpaca import Alpaca
-from TAI.broker.ib import IB as BrokerIB
+from TAI.source.alpaca import Alpaca
+from TAI.source.ib import IB as BrokerIB
 
 class Atom:
     def __init__(self, source='alpaca'):

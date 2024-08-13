@@ -1,5 +1,5 @@
 import pytest
-from TAI.broker.ib import IB
+from TAI.source.ib import IB
 
 def test_ib():
     ib = IB()

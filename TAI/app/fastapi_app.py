@@ -1,7 +1,7 @@
 # app/fastapi_app.py
 from fastapi import FastAPI
 import pandas as pd
-from TAI.data.fred import Fred
+from TAI.source.fred import Fred
 from TAI.analytics.plotly_plots import QuickPlot
 from fastapi.responses import JSONResponse, HTMLResponse
 

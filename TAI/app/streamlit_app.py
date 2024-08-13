@@ -1,7 +1,7 @@
 # app/streamlit_app.py
 import streamlit as st
 import pandas as pd
-from TAI.data.fred import Fred
+from TAI.source.fred import Fred
 from TAI.analytics.plotly_plots import QuickPlot
 
 class StreamlitApp:

@@ -1,7 +1,7 @@
 # app/flask_app.py
 from flask import Flask, jsonify, render_template_string
 import pandas as pd
-from TAI.data.fred import Fred
+from TAI.source.fred import Fred
 from TAI.analytics.plotly_plots import QuickPlot
 
 class FlaskApp:

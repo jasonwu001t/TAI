@@ -1,5 +1,5 @@
 import pytest
-from TAI.broker.alpaca import Alpaca
+from TAI.source.alpaca import Alpaca
 
 def test_alpaca():
     alpaca = Alpaca()

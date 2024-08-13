@@ -7,7 +7,7 @@ class QuickPlot:
     def __init__(self):
         pass
 
-    def plot_lines(self, dfs, labels=None, title="Line Plot"):
+    def plot_lines(self, dfs, labels=None, title="Line Plot", show_slide = False):
         if labels is None:
             labels = [f"Series {i+1}" for i in range(len(dfs))]
         color_sequence = px.colors.qualitative.Plotly  # Use Plotly's default qualitative color sequence
@@ -15,7 +15,7 @@ class QuickPlot:
         for i, (df_single, label) in enumerate(zip(dfs, labels)):
             fig.add_trace(go.Scatter(x=df_single.iloc[:, 0], y=df_single.iloc[:, 1], mode='lines', name=label, line=dict(color=color_sequence[i % len(color_sequence)])))
         fig.update_layout(title=title, xaxis_title='Date', yaxis_title='Value')
-        fig.update_xaxes(rangeslider=dict(visible=True), showgrid=False, tickformat='%b %Y')
+        fig.update_xaxes(rangeslider=dict(visible=show_slide), showgrid=False, tickformat='%b %Y')
         fig.update_yaxes(showgrid=False)
         fig.update_traces(textposition='top center')
         return fig
