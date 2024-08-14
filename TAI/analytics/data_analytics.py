@@ -89,9 +89,35 @@ class DataAnalytics:
         data['Slope'] = slope_line # Add the slope line to the DataFrame
         
         return data
+    
+    def calculate_category_weights(self, df, pivot_view=False):
+        """
+        Calculate the percentage weight for each category for each datetime.
+        
+        :param df: DataFrame with columns A (datetime), B (category), C (value).
+        :return: DataFrame with percentage weights for each category for each datetime.
+        
+        Input sample:
+        | datetime   | category | value |
+        |------------|----------|-------|
+        | 2023-04-01 | A        | 100   |
+        | 2023-04-01 | B        | 200   |
+        sample output:
+        datetime	category	value	percentage
+    	2023-04-01	A	100	33.333333
+    	2023-04-01	B	200	66.666667
+    	2023-04-02	A	150	37.500000
+    	2023-04-02	B	250	62.500000
+    	2023-04-03	A	300	100.000000
+        """
+        total = df.groupby(df.columns[0])[df.columns[2]].transform('sum')
+        df['percentage'] = (df['value'] / total) * 100        # Calculate percentage
+        if pivot_view == True:
+            return df.pivot_table(index=df.iloc[:, 0], columns=df.iloc[:, 1], values='percentage').reset_index()
+        else:
+            return df
 
-    @staticmethod
-    def get_pct_weights(df):
+    def get_pct_weights(self, df):
         """
         Calculate percentage weights of numerical columns.
         
@@ -113,8 +139,7 @@ class DataAnalytics:
         df_pct = df[[f'{column}_pct' for column in non_date_columns]].reset_index()  # only show the _pct columns
         return df_pct.round(2)
 
-    @staticmethod
-    def filter_period(df, period='Q'):
+    def filter_period(self, df, period='Q'):
         """
         Filter data to show only the last non-null value of each period.
         
@@ -142,35 +167,7 @@ class DataAnalytics:
         period_data[period_label] = period_data[date_column].dt.to_period(period).astype(str)
         return period_data
 
-    @staticmethod
-    def calculate_category_weights(df):
-        """
-        Calculate the percentage weight for each category for each datetime.
-        
-        :param df: DataFrame with columns A (datetime), B (category), C (value).
-        :return: DataFrame with percentage weights for each category for each datetime.
-        
-        Input sample:
-        | datetime   | category | value |
-        |------------|----------|-------|
-        | 2023-04-01 | A        | 100   |
-        | 2023-04-01 | B        | 200   |
-        sample output:
-        datetime	category	value	percentage
-    	2023-04-01	A	100	33.333333
-    	2023-04-01	B	200	66.666667
-    	2023-04-02	A	150	37.500000
-    	2023-04-02	B	250	62.500000
-    	2023-04-03	A	300	100.000000
-        """
-        total = df.groupby(df.columns[0])[df.columns[2]].transform('sum')
-        # Calculate percentage
-        df['percentage'] = (df['value'] / total) * 100
-        
-        return df
-    
-    @staticmethod
-    def dummy_value():
+    def dummy_value(self):
         """
         Generate a dummy DataFrame for testing purposes.
         
@@ -181,8 +178,7 @@ class DataAnalytics:
         df = pd.DataFrame({'Date': dates, 'Value': integers})
         return df
 
-    @staticmethod
-    def full_join_multi_tables(dfs):
+    def full_join_multi_tables(self, dfs):
         """
         Perform a full join on multiple DataFrames.
         
@@ -211,8 +207,7 @@ class DataAnalytics:
         result = result.ffill()
         return result
 
-    @staticmethod
-    def covariance(df, col1, col2, window=None):
+    def covariance(self, df, col1, col2, window=None):
         """
         Calculate covariance between two columns.
         
@@ -233,8 +228,7 @@ class DataAnalytics:
         else:
             return df[[col1, col2]].cov().iloc[0, 1]
 
-    @staticmethod
-    def correlation_coefficient(df, col1, col2, window=None):
+    def correlation_coefficient(self, df, col1, col2, window=None):
         """
         Calculate correlation coefficient between two columns.
         
@@ -255,8 +249,7 @@ class DataAnalytics:
         else:
             return df[[col1, col2]].corr().iloc[0, 1]
 
-    @staticmethod
-    def pvalue(df, col1, col2):
+    def pvalue(self, df, col1, col2):
         """
         Calculate p-value for cointegration test between two columns.
         
@@ -276,8 +269,7 @@ class DataAnalytics:
         score, pvalues, _ = coint(S1, S2)
         return pvalues
 
-    @staticmethod
-    def coefficient_of_variation(df, col, window=None):
+    def coefficient_of_variation(self, df, col, window=None):
         """
         Calculate coefficient of variation for a column.
         
@@ -301,7 +293,6 @@ class DataAnalytics:
             std_dev = df[col].std()
             return std_dev / mean
 
-    @staticmethod
     def z_score(self,df, col, value, window=None):
         """
         Calculate z-score for a value in a column.
@@ -327,8 +318,7 @@ class DataAnalytics:
             std_dev = df[col].std()
             return (value - mean) / std_dev
 
-    @staticmethod
-    def perc_change(df, horizon, keep_only_perc_change=True):
+    def perc_change(self, df, horizon, keep_only_perc_change=True):
         """
         Calculate percentage change over a horizon.
         
@@ -350,8 +340,7 @@ class DataAnalytics:
         else:
             return df.dropna()
 
-    @staticmethod
-    def describe_df(df):
+    def describe_df(self, df):
         """
         Describe the DataFrame, including percentiles.
         
@@ -366,8 +355,7 @@ class DataAnalytics:
         """
         return df.iloc[:, 1].describe(percentiles=[.001, .01, .05, .1, .15, .25, .5, .75, .85, .9, .95, .99, .999]).round(2).reset_index()
 
-    @staticmethod
-    def describe_df_forecast(df, input_value):
+    def describe_df_forecast(self, df, input_value):
         """
         Describe the DataFrame and forecast values based on input value.
         
