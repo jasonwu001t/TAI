@@ -1,23 +1,33 @@
-from TAI.utils import ConfigLoader
-import openai
-import logging
 import boto3
-# from GTI.auth_handler import OpenAIAuth, AWSAuth
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_aws import ChatBedrock
 
-class AWSBedrock: 
+class AWSBedrock:
     def __init__(self, region_name='us-east-1', endpoint_url='https://bedrock.us-east-1.amazonaws.com'):
         self.bedrock = boto3.client(service_name='bedrock', region_name=region_name, endpoint_url=endpoint_url)
         self.bedrock_runtime = boto3.client(service_name="bedrock-runtime", region_name="us-west-2")
-        self.available_models = self.list_available_models()
-        self.active_models = self.get_active_models()
         self.conversation_history = []
-            
+
+    @property
+    def available_models(self):
+        if not hasattr(self, '_available_models'):
+            self._available_models = self.list_available_models()
+        return self._available_models
+
+    @property
+    def active_models(self):
+        if not hasattr(self, '_active_models'):
+            self._active_models = self.get_active_models()
+        return self._active_models
+
     def list_available_models(self):
-        return self.bedrock.list_foundation_models()['modelSummaries']
-    
+        try:
+            return self.bedrock.list_foundation_models()['modelSummaries']
+        except Exception as e:
+            print(f"Error listing models: {e}")
+            return []
+
     def get_active_models(self):
         active_models = {}
         for model in self.available_models:
@@ -26,57 +36,9 @@ class AWSBedrock:
         return active_models
     
     def get_model_info(self, model_id):
-        if model_id in self.active_models:
-            return self.active_models[model_id]
-        else:
-            return None
-        
-    def generate_text(self, model_id, prompt, **kwargs):
-        """
-        Generate text using the specified AWS Bedrock model.
-        Supported kwargs:
-        -   max tokens (int): Maximum number of tokens to generate.
-        -   temperature (float): Temperature for text generation.
-        -   top_k (int): Number of top-k tokens to consider.
-        -   top_P (float): Top-p for nucleus sampling.
-        -   stop_sequences (list): List of stop sequences.
-        """
-        model_kwargs = {
-            "max_tokens": kwargs.get("max_tokens", 2048),
-            "temperature": kwargs.get("temperature", 0.1),
-            "top_k": kwargs.get("top_k", 250),
-            "top_p": kwargs. get("top_p", 1),
-            "stop_sequences": kwargs.get("stop_sequences", ["\n\nHuman"]),
-            }
+        return self.active_models.get(model_id)
 
-        model = ChatBedrock(
-            client=self.bedrock_runtime, 
-            model_id= model_id,
-            model_kwargs=model_kwargs,
-        )
-
-        messages = [
-            ("system", "You are an honest and helpful bot. You reply to the question in a concise and direct way."),
-            ("human", prompt)
-        ]
-
-        prompt = ChatPromptTemplate.from_messages(messages)
-        chain = prompt | model | StrOutputParser()
-        response = chain.invoke({"question": prompt})
-        return response
-
-    def generate_conversational_response(self, model_id, user_input, **kwargs):
-        """
-        Generate a conversational response, maintaining the conversation history.
-        Supported kwargs:
-        -   max tokens (int): Maximum number of tokens to generate.
-        -   temperature (float): Temperature for text generation.
-        -   top_k (int): Number of top-k tokens to consider.
-        -   top_P (float): Top-p for nucleus sampling.
-        -   stop_sequences (list): List of stop sequences.
-        """
-        self.conversation_history.append(("human", user_input))
-
+    def _generate_response(self, model_id, messages, **kwargs):
         model_kwargs = {
             "max_tokens": kwargs.get("max_tokens", 2048),
             "temperature": kwargs.get("temperature", 0.1),
@@ -91,14 +53,33 @@ class AWSBedrock:
             model_kwargs=model_kwargs,
         )
 
-        # Include system message only at the start of the conversation
+        # Create the prompt template directly from the messages
+        prompt = "".join([f"{role.capitalize()}: {message}\n" for role, message in messages])
+        
+        try:
+            # Use invoke instead of __call__
+            response = model.invoke(prompt)
+            # Extract the content assuming response is an object with a .content attribute
+            content = response.content if hasattr(response, 'content') else str(response)
+        except Exception as e:
+            print(f"Error generating response: {e}")
+            content = "I'm sorry, something went wrong."
+        return content
+    
+    def generate_text(self, model_id, prompt, **kwargs):
+        messages = [
+            ("system", "You are an honest and helpful bot. You reply to the question in a concise and direct way."),
+            ("human", prompt)
+        ]
+        return self._generate_response(model_id, messages, **kwargs)
+
+    def generate_conversational_response(self, model_id, user_input, **kwargs):
+        self.conversation_history.append(("human", user_input))
+
         if len(self.conversation_history) == 1:
             self.conversation_history.insert(0, ("system", "You are an honest and helpful bot. You reply to the question in a concise and direct way."))
 
-        prompt = ChatPromptTemplate.from_messages(self.conversation_history)
-        chain = prompt | model | StrOutputParser()
-        response = chain.invoke({"question": prompt})
+        response_content = self._generate_response(model_id, self.conversation_history, **kwargs)
 
-        # Append the AI's response to the conversation history
-        self.conversation_history.append(("assistant", response))
-        return response
+        self.conversation_history.append(("assistant", response_content))
+        return response_content
