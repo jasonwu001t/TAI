@@ -100,6 +100,31 @@ class SQLBuilder:
             file.write(query)
         print(f"SQL query saved to {filename}")
 
+    def append_sql(self, clause_type, clause):
+        if clause_type.lower() == "where":
+            if self.where_clause:
+                self.where_clause += f"\n  AND {clause}"
+            else:
+                self.where_clause = f"WHERE\n  {clause}"
+        elif clause_type.lower() == "join":
+            self.join_clause += f"\n{clause}"
+        elif clause_type.lower() == "order_by":
+            if self.order_by_clause:
+                self.order_by_clause += f",\n  {clause}"
+            else:
+                self.order_by_clause = f"ORDER BY\n  {clause}"
+        elif clause_type.lower() == "select":
+            if self.select_clause:
+                self.select_clause = self.select_clause.replace(
+                    "SELECT", f"SELECT\n  {clause},"
+                )
+            else:
+                self.select_clause = f"SELECT\n  {clause}"
+        # Add more clause types as needed
+        else:
+            raise ValueError(f"Unsupported clause type: {clause_type}")
+        return self
+
 # Example usage:
 if __name__ == "__main__":
     builder = SQLBuilder()
@@ -121,8 +146,12 @@ if __name__ == "__main__":
         .build()
     )
     
-    # Save the query to a file
-    builder.save_to_file("output_query.sql")
+    # Append additional SQL clauses
+    builder.append_sql("where", "condition3 = 'value3'")
+    builder.append_sql("order_by", "column3 DESC")
 
-    # Print the query
-    print(query)
+    # Save the updated query to a file
+    builder.save_to_file("updated_query.sql")
+
+    # Print the updated query
+    print(builder.build())
