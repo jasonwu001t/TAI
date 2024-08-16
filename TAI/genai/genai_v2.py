@@ -32,10 +32,9 @@ class AWSBedrock:
         self.llm = self.init_llm()
         self.memory = self.init_memory()
 
-     # CHATBOT for knowledge based agent, require configuration in bedrock
+     # CHATBOT for knowledge based agent, require configuration in bedrock, model id already selected in bedrock config
     def invoke_agent(self, agent_id, agent_alias_id, session_id, prompt):
-        try:
-            # See https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/bedrock-agent-runtime/client/invoke_agent.html
+        try: # See https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/bedrock-agent-runtime/client/invoke_agent.html
             response = self.bedrock_agent.invoke_agent(
                 agentId=agent_id,
                 agentAliasId=agent_alias_id,
@@ -145,17 +144,14 @@ class AWSBedrock:
             "top_p": kwargs.get("top_p", 1),
             "stop_sequences": kwargs.get("stop_sequences", ["\n\nHuman"]),
         }
-
         model = ChatBedrock(
             client=self.bedrock_runtime, 
             model_id=self.model_id,
             model_kwargs=model_kwargs,
         )
-
         # Create the prompt template directly from the messages
         prompt = "".join([f"{role.capitalize()}: {message}\n" for role, message in messages])
         content_dict = {}
-
         try:
             response = model.invoke(prompt)
             content_dict['response']= response.content
