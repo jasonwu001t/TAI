@@ -10,14 +10,15 @@ class AWSBedrock:
                  model_id="anthropic.claude-v2:1", 
                  model_kwargs=None, 
                  max_token_limit=512):
+        
         self.region_name = region_name
         self.endpoint_url = endpoint_url
         self.model_id = model_id
         self.model_kwargs = model_kwargs if model_kwargs is not None else {
-            "temperature": 0.9,
-            "top_p": 0.5,
-            "max_tokens_to_sample": 512
-        }
+                                                                            "temperature": 0.9,
+                                                                            "top_p": 0.5,
+                                                                            "max_tokens_to_sample": 512
+                                                                        }
         self.max_token_limit = max_token_limit
         self.conversation_history = []
 
