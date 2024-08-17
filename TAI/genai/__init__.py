@@ -1,7 +1,6 @@
 # genai/__init__.py
-from .genai import GenAI,AWSBedrock
+from .genai import AWSBedrock
 
 __all__ = [
-    'GenAI',
     'AWSBedrock'
 ]

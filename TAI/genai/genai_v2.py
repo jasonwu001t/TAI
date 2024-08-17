@@ -5,7 +5,7 @@ from langchain.memory import ConversationBufferMemory
 from langchain.chains import ConversationChain
 from langchain_aws import ChatBedrock
 
-# Makesure you have configured bedrock at the right region, url, and model
+# Makesure you have configured bedrock at the right region, url, and model in aws console
 class AWSBedrock:
     def __init__(self, 
                  region_name='us-west-2', 
