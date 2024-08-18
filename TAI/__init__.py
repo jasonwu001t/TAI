@@ -3,7 +3,7 @@ from .utils.auth_sync import AuthSync
 from .source import AlpacaAuth,Alpaca, IBTrade, Robinhood,Treasury, BLS, Fred
 from .data import Atom, Redshift, DataMaster, SQLBuilder
 from .analytics import DataAnalytics,QuickPlot
-from .genai import AWSBedrock
+from .genai import AWSBedrock,TextToSQLAgent
 from .app import FlaskApp, stframe, FastAPIApp, SlackApp
 from .strategy import OptionBet
 from .utils import ConfigLoader
@@ -14,7 +14,7 @@ __all__ = [
     ,'AlpacaAuth','Alpaca', 'IBTrade', 'Robinhood','Treasury', 'BLS', 'Fred'
     ,'Atom', 'Redshift','DataMaster', 'SQLBuilder'
     ,'DataAnalytics','QuickPlot'
-    ,'AWSBedrock'
+    ,'AWSBedrock','TextToSQLAgent'
     ,'FlaskApp', 'stframe', 'FastAPIApp', 'SlackApp'
     ,'OptionBet'
     ,'ConfigLoader'

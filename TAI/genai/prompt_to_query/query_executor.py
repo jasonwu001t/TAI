@@ -42,8 +42,10 @@ class QueryExecutor:
             # Handle schema-level query
             schema_response = self.sql_generator.handle_schema_query(user_prompt)
             return None, schema_response
-
+        
+        # print ('USER PROMPT INPUT,', user_prompt)
         sql_query = self.sql_generator.generate_sql_query(user_prompt)
+        # print ('SQL QUERY', sql_query)
         if sql_query is None:
             # If not related to tables or schema, generate and return a direct response
             direct_response = self.sql_generator.generate_direct_response(user_prompt)
@@ -96,7 +98,7 @@ class QueryExecutor:
             text_response += f"{row_description}\n"
         
         return text_response
-    
+
 
     def result_to_text_v2(self, result, user_prompt, sql_query=None):
         """
@@ -136,7 +138,6 @@ class QueryExecutor:
         {result_text}
         Please generate a natural language response summarizing the query results, incorporating the schema and its description.
         """
-
         # Generate the AI response
         response = self.sql_generator.aws_bedrock.generate_text(prompt)
         

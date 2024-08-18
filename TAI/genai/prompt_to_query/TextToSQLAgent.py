@@ -1,20 +1,27 @@
 import polars as pl
 import os
-from data_catalog import CentralDataCatalog
-from materialized_view_manager import MaterializedViewManager
-from query_executor import QueryExecutor
-from sql_generator import SQLGenerator
-from logging_config import init_logger
+from TAI.genai.prompt_to_query.data_catalog import CentralDataCatalog
+from TAI.genai.prompt_to_query.materialized_view_manager import MaterializedViewManager
+from TAI.genai.prompt_to_query.query_executor import QueryExecutor
+from TAI.genai.prompt_to_query.sql_generator import SQLGenerator
+from TAI.genai.prompt_to_query.logging_config import init_logger
 
-import sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from genai import AWSBedrock  # Ensure this is the correct import for AWSBedrock
+# import sys
+# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from TAI.genai.genai_v2 import AWSBedrock  # Ensure this is the correct import for AWSBedrock
 
 class TextToSQLAgent:
     def __init__(self, data_catalog_path='data_catalog.json', data_folder='data', max_retries=3):
         # Initialize logging
         init_logger()
-
+        ########################################### CAN DELETE
+        # from TAI.data import DataMaster
+        # dm = DataMaster()
+        # cur_path = dm.get_current_dir()
+        # json_file_path = os.path.join(cur_path, 'data_catalog.json')
+        # print (json_file_path)
+        # self.data_catalog_path = json_file_path
+        ###########################################
         # Load the data catalog
         self.data_catalog = CentralDataCatalog()
         self.data_catalog.load_from_json(data_catalog_path)
@@ -70,6 +77,7 @@ class TextToSQLAgent:
         """
         # Validate and execute the query or generate a direct response
         sql_query, result = self.query_executor.validate_and_execute(user_prompt)
+        # print (sql_query, result)
 
         # Generate a natural language response based on the query result, schema, and descriptions
         text_response = self.query_executor.result_to_text(result, user_prompt, sql_query)

@@ -14,6 +14,11 @@ class CentralDataCatalog:
         Returns:
         None
         """
+        # from TAI.data import DataMaster
+        # dm = DataMaster()
+        # cur_path = dm.get_current_dir()
+        # json_file_path = os.path.join(cur_path, 'data_catalog.json')
+
         with open(json_file, 'r') as f:
             data = json.load(f)
             for table_name, info in data.items():

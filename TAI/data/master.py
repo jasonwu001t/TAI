@@ -118,11 +118,16 @@ class DataMaster:
     def set_s3_client(aws_session=None):
         return aws_session.client('s3') if aws_session else None
 
-    def load_from_local(self, file_path, file_format):
+    def load_from_local(self, file_name, file_format, base_path='in_dir'):
+        if base_path =='in_dir':
+            dir_path = os.path.join(self.get_current_dir(), 'data')
+
+        full_path = os.path.join(dir_path, file_name)
+
         if file_format == 'csv':
-            return pd.read_csv(file_path)
+            return pd.read_csv(full_path)
         elif file_format == 'parquet':
-            return pd.read_parquet(file_path)
+            return pd.read_parquet(full_path)
 
     def save_to_s3(self, bucket_name, object_name, data, aws_session=None):
         s3_client = self.set_s3_client(aws_session)

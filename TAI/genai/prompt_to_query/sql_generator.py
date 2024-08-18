@@ -1,4 +1,5 @@
 import logging
+# from TAI.genai import AWSBedrock  # Import your AWSBedrock class here
 
 class SQLGenerator:
     def __init__(self, aws_bedrock, dataframes, data_catalog):
@@ -97,6 +98,8 @@ class SQLGenerator:
         Please do not include any information other than the exact structured sql query that can be executed
         """
         response = self.aws_bedrock.generate_text(prompt)
+        # print ('RESPONSE FROM GENERATE_SQL_QUERY()')
+        # print (response)
         self.logger.info(f"Generated SQL query for prompt: {user_prompt}")
         return response['response']
 
