@@ -9,7 +9,8 @@ TABLE_DETAILS = {
     "productsubcategories": "Each product belongs to a product subcategory",
 }
 
-SQL_TEMPLATE_STR = """Given an input question, first create a syntactically correct {dialect} query to run, then look at the results of the query and return the answer.
+SQL_TEMPLATE_STR = """Given an input question, first create a syntactically correct {dialect} query to run, 
+    then look at the results of the query and return the answer.
     You can order the results by a relevant column to return the most interesting examples in the database.\n\n
     Never query for all the columns from a specific table, only ask for a few relevant columns given the question.\n\n
     Pay attention to use only the column names that you can see in the schema description. Be careful to not query for columns that do not exist.

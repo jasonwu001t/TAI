@@ -3,7 +3,7 @@ import csv
 import json
 import logging
 
-from connections import Connections
+# from connections import Connections
 from llama_index.core import ServiceContext, SQLDatabase, VectorStoreIndex
 from llama_index.core.indices.struct_store import SQLTableRetrieverQueryEngine
 from llama_index.core.objects import ObjectIndex, SQLTableNodeMapping, SQLTableSchema
@@ -14,8 +14,8 @@ from prompt_templates import RESPONSE_TEMPLATE_STR, SQL_TEMPLATE_STR, TABLE_DETA
 from sqlalchemy import create_engine
 
 # Set up logging
-logging.basicConfig(level=Connections.log_level)
-logger = logging.getLogger(__name__)
+# logging.basicConfig(level=Connections.log_level)
+# logger = logging.getLogger(__name__)
 
 NUM_FEW_SHOT_EXAMPLES_TO_CONSIDER = 3
 NUM_TABLES_TO_CONSIDER = 5
@@ -24,10 +24,9 @@ def create_sql_engine():
     conn_url = f"awsathena+rest://athena.{Connections.region_name}.amazonaws.com/{Connections.text2sql_database}?s3_staging_dir=s3://{Connections.athena_bucket_name}"
     return create_engine(conn_url)
 
-
 def get_few_shot_retriever(embed_model):
     with open(
-        Connections.fewshot_examples_path, newline="", encoding="utf-8-sig"
+        'dynamic_examples.csv', newline="", encoding="utf-8-sig"
     ) as csvfile:
         reader = csv.DictReader(csvfile, skipinitialspace=True)
         data_dict = {row["example_input_question"]: row for row in reader}

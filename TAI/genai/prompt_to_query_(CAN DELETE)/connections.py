@@ -8,17 +8,17 @@ logger.setLevel(logging.INFO)
 
 
 class Connections:
-    region_name = "us-east-1"
-    athena_bucket_name = os.getenv("ATHENA_BUCKET_NAME")
-    text2sql_database = os.getenv("TARGET_DB")
-    log_level = os.getenv("LOG_LEVEL", "INFO")
-    fewshot_examples_path = os.getenv(
-        "FEWSHOT_EXAMPLES_PATH",
-        os.path.join(
-            os.path.dirname(os.path.realpath(__file__)), "dynamic_examples.csv"
-        ),
-    )
-    s3_resource = boto3.resource("s3", region_name=region_name)
+    region_name = "us-west-2"
+    # athena_bucket_name = os.getenv("ATHENA_BUCKET_NAME")
+    # text2sql_database = os.getenv("TARGET_DB")
+    # log_level = os.getenv("LOG_LEVEL", "INFO")
+    # fewshot_examples_path = os.getenv(
+    #     "FEWSHOT_EXAMPLES_PATH",
+    #     os.path.join(
+    #         os.path.dirname(os.path.realpath(__file__)), "dynamic_examples.csv"
+    #     ),
+    # )
+    # s3_resource = boto3.resource("s3", region_name=region_name)
     bedrock_client = boto3.client("bedrock-runtime", region_name=region_name)
 
     @staticmethod
