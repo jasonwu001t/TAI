@@ -93,14 +93,15 @@ class DataMaster:
                 file_name,
                 type="parquet",
                 dir_name="data", 
-                how = "in_dir"):
+                how = "in_dir"): # in_dir, or calendar
         # locate the data folder
         default_path = os.path.join(self.get_current_dir(), dir_name)
-
+        # print (default_path)
         if how =='calendar':
             today = datetime.now()
             year, month, day = today.year, today.month, today.day
-            dir_path = os.path.join(dir_name, f"{year}", f"{month:02d}", f"{day:02d}")
+            dir_path = os.path.join(default_path, f"{year}", f"{month:02d}", f"{day:02d}")
+            # print (dir_path)
             os.makedirs(dir_path, exist_ok=True)
         if how =='in_dir':
             dir_path = default_path
