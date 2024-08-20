@@ -1,0 +1,20 @@
+{
+    "dddd": {
+        "title": "My Custom Title for Chart 1",
+        "type": "html",
+        "width": "800px",
+        "height": "600px"
+    },
+    "chart2": {
+        "title": null,
+        "type": "plotly",
+        "width": "default",
+        "height": "default"
+    },
+    "chart3": {
+        "title": "Third Chart with Different Title",
+        "type": "html",
+        "width": "100%",
+        "height": "700px"
+    }
+}

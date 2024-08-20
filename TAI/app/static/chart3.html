@@ -1,0 +1,22 @@
+<!-- static/chart3.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Chart 3</title>
+</head>
+<body>
+    <div id="chart"></div>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script>
+        var data = [{
+            type: 'scatter',
+            mode: 'lines',
+            x: [1, 2, 3, 4],
+            y: [10, 15, 13, 17]
+        }];
+
+        Plotly.newPlot('chart', data);
+    </script>
+</body>
+</html>

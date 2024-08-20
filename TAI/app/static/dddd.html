@@ -1,0 +1,21 @@
+<!-- static/chart1.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Chart 1</title>
+</head>
+<body>
+    <div id="chart"></div>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script>
+        var data = [{
+            type: 'bar',
+            x: ['A', 'B', 'C'],
+            y: [10, 15, 7]
+        }];
+
+        Plotly.newPlot('chart', data);
+    </script>
+</body>
+</html>

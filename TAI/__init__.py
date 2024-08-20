@@ -4,7 +4,7 @@
 # from .data import Redshift, DataMaster, SQLBuilder
 # from .analytics import DataAnalytics,QuickPlot
 # from .genai import AWSBedrock,TextToSQLAgent
-# from .app import FlaskApp, stframe, FastAPIApp, SlackApp
+# from .app import FlaskChartServer, stframe, FastAPIApp, SlackApp
 # # from .strategy import OptionBet
 # from .utils import ConfigLoader
 
@@ -15,6 +15,6 @@
 #     ,'Redshift','DataMaster', 'SQLBuilder'
 #     ,'DataAnalytics','QuickPlot'
 #     ,'AWSBedrock','TextToSQLAgent'
-#     ,'FlaskApp', 'stframe', 'FastAPIApp', 'SlackApp'
+#     ,'FlaskChartServer', 'stframe', 'FastAPIApp', 'SlackApp'
 #     ,'ConfigLoader'
 # ]
