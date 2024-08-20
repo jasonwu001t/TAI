@@ -11,6 +11,8 @@ cron.txt
 
 # C extensions
 *.so
+*.csv
+*.parquet
 
 # Distribution / packaging
 __pycache__/
