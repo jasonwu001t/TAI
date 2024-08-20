@@ -1,5 +1,5 @@
 import pytest
-from TAI.data.atom import Atom
+from TAI.source.atom import Atom
 
 def test_atom():
     atom = Atom()

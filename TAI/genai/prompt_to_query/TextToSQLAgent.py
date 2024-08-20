@@ -8,20 +8,15 @@ from TAI.genai.prompt_to_query.logging_config import init_logger
 
 # import sys
 # sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from TAI.genai.genai_v2 import AWSBedrock  # Ensure this is the correct import for AWSBedrock
+from TAI.genai.genai import AWSBedrock  # Ensure this is the correct import for AWSBedrock
 
 class TextToSQLAgent:
-    def __init__(self, data_catalog_path='data_catalog.json', data_folder='data', max_retries=3):
+    def __init__(self, data_catalog_path='data_catalog.json', 
+                 data_folder='data', 
+                 max_retries=3):
         # Initialize logging
         init_logger()
-        ########################################### CAN DELETE
-        # from TAI.data import DataMaster
-        # dm = DataMaster()
-        # cur_path = dm.get_current_dir()
-        # json_file_path = os.path.join(cur_path, 'data_catalog.json')
-        # print (json_file_path)
-        # self.data_catalog_path = json_file_path
-        ###########################################
+        
         # Load the data catalog
         self.data_catalog = CentralDataCatalog()
         self.data_catalog.load_from_json(data_catalog_path)

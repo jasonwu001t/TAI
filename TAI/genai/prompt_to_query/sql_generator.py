@@ -1,4 +1,4 @@
-import logging
+import logging, uuid
 # from TAI.genai import AWSBedrock  # Import your AWSBedrock class here
 
 class SQLGenerator:
@@ -8,6 +8,15 @@ class SQLGenerator:
         self.data_catalog = data_catalog
         self.schema_description = self.generate_schema_description()
         self.logger = logging.getLogger('SQLGenerator')
+
+        self.agent_id = ""
+        self.agent_alias_id = ""
+        self.session_id = str(uuid.uuid4())
+
+    def chatbot(self, prompt):
+        chatbot=self.aws_bedrock.generate_text(prompt)
+        chatbot= self.aws_bedrock.invoke_agent(self.agent_id, self.agent_alias, self.session_id, prompt)
+        return chatbot
 
     def generate_schema_description(self):
         """
@@ -97,7 +106,7 @@ class SQLGenerator:
         Make sure the query is valid SQL and can be run against the schema provided.
         Please do not include any information other than the exact structured sql query that can be executed
         """
-        response = self.aws_bedrock.generate_text(prompt)
+        response = self.chatbot(prompt)
         # print ('RESPONSE FROM GENERATE_SQL_QUERY()')
         # print (response)
         self.logger.info(f"Generated SQL query for prompt: {user_prompt}")
@@ -115,6 +124,6 @@ class SQLGenerator:
         str: The direct response from the AI model.
         """
         prompt = f"Respond to the following request: {user_prompt}"
-        response = self.aws_bedrock.generate_text(prompt)
+        response = self.chatbot(prompt)
         self.logger.info(f"Generated direct response for prompt: {user_prompt}")
         return response['response']

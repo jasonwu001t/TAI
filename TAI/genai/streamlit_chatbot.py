@@ -1,6 +1,6 @@
 import streamlit as st
 import uuid
-from genai_v2 import AWSBedrock  # Adjusted import to match the new backend structure
+from TAI.genai.genai import AWSBedrock  # Adjusted import to match the new backend structure
 
 # https://github.com/acwwat/amazon-bedrock-agent-test-ui
 

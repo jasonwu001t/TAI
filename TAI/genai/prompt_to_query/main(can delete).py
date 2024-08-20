@@ -5,7 +5,7 @@ from materialized_view_manager import MaterializedViewManager
 from query_executor import QueryExecutor
 from sql_generator import SQLGenerator
 from logging_config import init_logger
-from genai import AWSBedrock  # Import your AWSBedrock class here
+from TAI.genai.genai_v0_pending_delete import AWSBedrock  # Import your AWSBedrock class here
 
 def load_sample_data(catalog, data_folder='data'):
     """

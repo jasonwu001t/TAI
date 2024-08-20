@@ -30,7 +30,8 @@ setup(
         'fastapi',
         'langchain-core',
         'langchain_aws',
-        'slack_bolt'
+        'slack_bolt',
+        'polars'
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
