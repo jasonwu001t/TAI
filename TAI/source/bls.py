@@ -1,11 +1,8 @@
 """IF Error, check if added api_key"""
 from TAI.utils import ConfigLoader
-import requests
-import json
+import requests, json
 import pandas as pd
 from datetime import datetime
-
-# from GTI.data.master import DataSaver
 
 class BLSAuth:
     def __init__(self):
@@ -19,8 +16,7 @@ class BLS:
     def __init__(self):
         auth = BLSAuth()
         self.api_key = auth.get_api_key()
-        self.lookback_years = 4
-        # self.data_saver = DataSaver()
+        self.lookback_years = 5
 
     def fetch_bls_data(self, series_ids, start_year, end_year, mom_diff=True):
         headers = {'Content-type': 'application/json'}
@@ -81,10 +77,7 @@ class BLS:
         return self.fetch_bls_data(series_ids=["LNS14000009", "LNS14000006", "LNS14000003", "LNS14000000"], 
                                    start_year=datetime.now().year - self.lookback_years, 
                                    end_year=datetime.now().year)
-
-    # def save_data(self, dataframes, file_format="parquet"):
-    #     self.data_saver.save_data(dataframes, file_format)
-
+    
 if __name__ == "__main__":
     bls = BLS()
 
@@ -105,5 +98,5 @@ if __name__ == "__main__":
         'unemployment_by_demographic': df_unemployment_by_demographic
     }
 
-    # bls.save_data(dataframes, file_format="parquet")
-    # bls.save_data(dataframes, file_format="csv")
+    bls.save_data(dataframes, file_format="parquet")
+    bls.save_data(dataframes, file_format="csv")

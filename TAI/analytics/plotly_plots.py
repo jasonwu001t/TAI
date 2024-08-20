@@ -77,7 +77,10 @@ class QuickPlot:
 
         fig.show()
 
-    def plot_interest_rates(self, df_dict):
+    def plot_interest_rates(self, df_dict, hidden_labels=None):
+        if hidden_labels is None:
+            hidden_labels = []
+            
         fig = go.Figure()
         color_sequence = px.colors.qualitative.Plotly
         num_colors = len(color_sequence)
@@ -86,12 +89,15 @@ class QuickPlot:
         for i, (label, df) in enumerate(df_dict.items()):
             melted_df = df.reset_index().melt(id_vars=['date'], var_name='maturity', value_name='values')
             first_date = melted_df['date'].iloc[0] if 'date' in melted_df.columns else 'Unknown Date'
+            is_visible = 'legendonly' if label in hidden_labels else True
+
             fig.add_trace(go.Scatter(
                 x=melted_df['maturity'], y=melted_df['values'], mode='lines+markers',
                 name=f"{label}: {first_date.strftime('%Y-%m-%d') if isinstance(first_date, pd.Timestamp) else first_date}",
                 line=dict(color=color_sequence[i % num_colors], width=3),
                 marker=dict(color='white', size=10, line=dict(color=color_sequence[i % num_colors], width=2)),
-                opacity=opacities[i % len(opacities)]
+                opacity=opacities[i % len(opacities)],
+                visible=is_visible
             ))
 
         fig.update_layout(title='Interest Rate Curve', xaxis_title='Maturity', yaxis_title='Values', plot_bgcolor='white')
@@ -99,6 +105,8 @@ class QuickPlot:
         fig.update_yaxes(showgrid=False, showline=True, linewidth=2, linecolor='black', mirror=True, fixedrange=True)
 
         return fig
+    # fig = plot_interest_rates(df_dict, hidden_labels=['Label1', 'Label3'])
+
 
     def plot_bar(self, df, labels=None, title="Bar Plot", x='date', y='value', **layout_kwargs):
         if labels is None:
@@ -296,6 +304,7 @@ if __name__ == "__main__":
         'Last 3 Months': df2,
         'Last Year': df1
     }
+    
     fig_rates = qp.plot_interest_rates(rates_data)
     fig_rates.show()
 

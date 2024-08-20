@@ -1,15 +1,17 @@
 import pandas as pd
+import os
 from TAI.data import DataMaster
-from TAI.data import Treasury
 from TAI.analytics import QuickPlot
 
 def generate_interest_rate_plot():
     dm = DataMaster()
-    tt = Treasury()
     qp = QuickPlot()
 
     # Load rates and process NaN values
-    rates = tt.load_all_yield()
+    full_path = os.path.join(dm.get_current_dir(), 'data','treasury_yield_all.csv')
+    print (full_path)
+
+    rates = pd.read_csv(full_path)
     for col in rates.columns:
         rates[col] = rates[col].fillna(rates[rates.columns[rates.columns.get_loc(col) - 1]])
 
@@ -28,7 +30,11 @@ def generate_interest_rate_plot():
         'Last Month': pd.DateOffset(months=1),
         'Last 3 Months': pd.DateOffset(months=3),
         'Last Year': pd.DateOffset(years=1),
-        '3 Years Ago': pd.DateOffset(years=3)
+        '3 Years Ago': pd.DateOffset(years=3),
+        '5 Years Ago': pd.DateOffset(years=5),
+        '10 Years Ago': pd.DateOffset(years=10),
+        '20 Years Ago': pd.DateOffset(years=20),
+        '30 Years Ago': pd.DateOffset(years=30)
     }
 
     # Get rates for each time period
@@ -37,7 +43,7 @@ def generate_interest_rate_plot():
         rates_data[period_name] = rates.loc[[rates.index.asof(latest_rate_date - offset)]]
 
     # Plot the rates
-    fig_rates = qp.plot_interest_rates(rates_data)
+    fig_rates = qp.plot_interest_rates(rates_data, hidden_labels=['3 Years Ago','5 Years Ago', '10 Years Ago','20 Years Ago', '30 Years Ago'])
     
     return fig_rates
 

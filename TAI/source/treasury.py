@@ -1,7 +1,5 @@
-# us_treasury_rate.py
-import os
 import pandas as pd
-import requests
+import requests, os
 from datetime import datetime 
 from TAI.data import DataMaster
 
@@ -12,10 +10,6 @@ class Treasury:
         self.dm = DataMaster()
         self.current_dir = self.dm.get_current_dir()
         pass
-
-    # @staticmethod
-    # def get_script_directory():
-    #     return os.path.dirname(os.path.abspath(__file__))
 
     def get_treasury(self, year):
         url = self.BASE_URL.format(year)
@@ -36,26 +30,26 @@ class Treasury:
         all_df = [self.get_treasury(y) for y in all_years]
         df_concatenated = pd.concat([df for df in all_df if df is not False], ignore_index=True)
         return df_concatenated
-    
+
     def update_yearly_yield(self, year):
         # Construct a file path relative to the current script's directory
-        file_path = os.path.join(self.current_dir, 'treasury_yield_{}.csv'.format(year))
+        file_path = os.path.join(self.current_dir, 'data', 'treasury_yield_all.csv')#.format(year))
         if os.path.exists(file_path):
             existing_df = pd.read_csv(file_path, index_col=0)
         else:
             existing_df = pd.DataFrame()
         new_df = self.get_treasury(year)
-        if new_df is not False:
+        if new_df is not False: 
             updated_df = pd.concat([existing_df, new_df], ignore_index=True)
             updated_df.drop_duplicates(keep='last', inplace=True)
             updated_df.to_csv(file_path)
-            print('Data successfully updated and written to file.')
+            print('{} Data successfully updated and written to file.'.format(datetime.today()))
         else:
             updated_df = existing_df
-            print('Failed to update data. Using existing data.')
+            print('{} Failed to update data. Using existing data.'.format(datetime.today()))
 
     def load_all_yield(self):
-        historical_rates = pd.read_csv(os.path.join(self.current_dir,'treasury_yield_1990-2023.csv'))
+        historical_rates = pd.read_csv(os.path.join(self.current_dir,'treasury_yield_all.csv'))
         new_rates = pd.read_csv(os.path.join(self.current_dir,'treasury_yield_{}.csv'.format(datetime.now().year)))
         rates = pd.concat([historical_rates, new_rates])#.sort_values('Date')
         return rates
@@ -67,5 +61,5 @@ if __name__ == "__main__":
                                            end_year = 2023)
     print(rates.head())
 
-    # updated_rates = treasury.update_yearly_rates(2023)
-    # print(updated_rates.head())
+    updated_rates = treasury.update_yearly_rates(2023)
+    print(updated_rates.head())
