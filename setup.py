@@ -28,6 +28,7 @@ setup(
         "flask",
         'streamlit',
         'fastapi',
+        'langchain',
         'langchain-core',
         'langchain_aws',
         'slack_bolt',
@@ -41,7 +42,7 @@ setup(
     package_data={
         '': ['*.ini'],
     },
-    python_requires=">=3.6",
+    python_requires=">=3.11",
 )
 
 

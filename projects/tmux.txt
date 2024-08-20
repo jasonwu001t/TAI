@@ -1,0 +1,20 @@
+#https://www.youtube.com/watch?v=Yl7NFenTgIo
+get into tmux : tmux
+split one more tab to right : Ctrl + b + %
+switch to the left tab  : Ctrl + b + <- 
+after creating right and left tabs, create one more below : Ctrl + b + "
+close the tab : type exit in the tab
+
+create new window (below name will change) : Ctrl + b + c
+Switch between windows : Ctrl + b + 0 (0 is the default window name)
+rename window : Ctrl + b + , + {window_name}
+close down a window : exit
+
+[Sessions]
+Detach a session : Ctrl + b + d
+view all sessions : tmux ls
+Re-attach session 0 (in terminal): tmux attach -t 0
+rename session 0 to name git : tmux rename-session -t 0 git
+create new session with a name called docker: tmux new -s docker
+delete/kill session (eg. kill docker session): tmux kill-session -t docker
+

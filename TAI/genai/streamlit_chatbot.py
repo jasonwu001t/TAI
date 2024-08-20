@@ -4,7 +4,7 @@ from TAI.genai.genai import AWSBedrock  # Adjusted import to match the new backe
 
 # https://github.com/acwwat/amazon-bedrock-agent-test-ui
 
-client = 'agent' # agent, conversation,  function_handler
+client = 'function_handler' # agent, conversation,  function_handler
 agent_id = ''
 agent_alias_id = ''
 
