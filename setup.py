@@ -31,6 +31,7 @@ setup(
         'langchain',
         'langchain-core',
         'langchain_aws',
+        '-U langchain_community',
         'slack_bolt',
         'polars'
     ],

@@ -15,7 +15,7 @@ class SQLGenerator:
 
     def chatbot(self, prompt):
         chatbot=self.aws_bedrock.generate_text(prompt)
-        chatbot= self.aws_bedrock.invoke_agent(self.agent_id, self.agent_alias, self.session_id, prompt)
+        chatbot= self.aws_bedrock.invoke_agent(self.agent_id, self.agent_alias_id, self.session_id, prompt)
         return chatbot
 
     def generate_schema_description(self):
