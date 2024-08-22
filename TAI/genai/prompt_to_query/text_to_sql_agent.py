@@ -1,16 +1,10 @@
-"""
-Embedding not working so well, need to use v0 version
-"""
-
-
 import polars as pl
 import os
 import json
 import logging
 import uuid
-import numpy as np
 from TAI.genai import AWSBedrock
-from utils import init_logger, get_sql_generation_prompt, get_direct_response_prompt, get_result_summary_prompt
+from utils import init_logger, get_sql_generation_prompt, get_direct_response_prompt
 
 class CentralDataCatalog:
     def __init__(self):
@@ -40,24 +34,20 @@ class CentralDataCatalog:
     def list_tables(self):
         return list(self.catalog.keys())
 
-    def generate_schema_embeddings(self, aws_bedrock):
-        schema_keywords = ["schema", "tables", "description", "records", "loaded tables", "table description"]
-        for keyword in schema_keywords:
-            embedding = self.normalize_embedding(aws_bedrock.generate_embedding(keyword))
-            self.schema_embeddings[keyword] = embedding
-
-    def generate_table_embeddings(self, aws_bedrock):
+    def generate_embeddings(self, aws_bedrock):
+        # Generate schema embeddings
+        for keyword in ["schema", "tables", "description", "records", "loaded tables", "table description"]:
+            self.schema_embeddings[keyword] = aws_bedrock.generate_embedding(keyword)
+        
+        # Generate table embeddings
         for table_name in self.list_tables():
-            table_embedding = self.normalize_embedding(aws_bedrock.generate_embedding(table_name))
-            self.table_embeddings[table_name] = table_embedding
-            for col in self.catalog[table_name].get('columns', []):
-                col_embedding = self.normalize_embedding(aws_bedrock.generate_embedding(col))
-                self.table_embeddings[f"{table_name}.{col}"] = col_embedding
-
-    def normalize_embedding(self, embedding):
-        if embedding is not None:
-            return embedding / np.linalg.norm(embedding)
-        return None
+            table_info = self.get_catalog_info(table_name)
+            if table_info:
+                table_text = f"{table_name}: {table_info['description']}"
+                self.table_embeddings[table_name] = aws_bedrock.generate_embedding(table_text)
+                for col in table_info.get('columns', []):
+                    col_text = f"{table_name}.{col}"
+                    self.table_embeddings[col_text] = aws_bedrock.generate_embedding(col_text)
 
 class MaterializedViewManager:
     def __init__(self):
@@ -83,15 +73,16 @@ class SQLGenerator:
         self.dataframes = dataframes
         self.data_catalog = data_catalog
         self.schema_description = self.generate_schema_description()
-        self.logger = logging.getLogger('SQLGenerator')
+        self.logger = logging.getLogger('TextToSQL')
+        self.logger.info("SQLGenerator initialized successfully.")  # Log at initialization
 
         self.agent_id = ""
         self.agent_alias_id = ""
         self.session_id = str(uuid.uuid4())
 
-        # Generate embeddings for schema and table keywords
-        self.data_catalog.generate_schema_embeddings(self.aws_bedrock)
-        self.data_catalog.generate_table_embeddings(self.aws_bedrock)
+        # Generate embeddings for schema and table
+        self.data_catalog.generate_embeddings(self.aws_bedrock)
+
 
     def chatbot(self, prompt):
         response = self.aws_bedrock.generate_text(prompt)
@@ -105,24 +96,28 @@ class SQLGenerator:
             columns = ", ".join(df.columns)
             descriptions.append(f"Table {table_name} ({columns}): {table_description}")
         return "; ".join(descriptions)
-    
+
     def is_prompt_related_to_schema(self, user_prompt):
-        prompt_embedding = self.data_catalog.normalize_embedding(self.aws_bedrock.generate_embedding(user_prompt))
-        schema_similarity = max(
-            self.aws_bedrock.calculate_similarity(prompt_embedding, embedding)
-            for embedding in self.data_catalog.schema_embeddings.values()
-        )
-        self.logger.debug(f"Schema similarity for prompt '{user_prompt}': {schema_similarity}")
-        return schema_similarity > 0.001  # Use a threshold to determine relevance
+        prompt_embedding = self.aws_bedrock.generate_embedding(user_prompt)
+        max_similarity = 0
+        for keyword, embedding in self.data_catalog.schema_embeddings.items():
+            similarity = self.aws_bedrock.calculate_similarity(prompt_embedding, embedding)
+            # self.logger.info(f"Schema keyword '{keyword}' similarity: {similarity}")
+            if similarity > max_similarity:
+                max_similarity = similarity
+        self.logger.info(f"Maximum schema similarity: {max_similarity}")
+        return max_similarity > 0.7  # Use a threshold to determine relevance
 
     def is_prompt_related_to_tables(self, user_prompt):
-        prompt_embedding = self.data_catalog.normalize_embedding(self.aws_bedrock.generate_embedding(user_prompt))
-        table_similarity = max(
-            self.aws_bedrock.calculate_similarity(prompt_embedding, embedding)
-            for embedding in self.data_catalog.table_embeddings.values()
-        )
-        self.logger.debug(f"Table similarity for prompt '{user_prompt}': {table_similarity}")
-        return table_similarity > 0.001 # Use a threshold to determine relevance
+        prompt_embedding = self.aws_bedrock.generate_embedding(user_prompt)
+        max_similarity = 0
+        for table_name, embedding in self.data_catalog.table_embeddings.items():
+            similarity = self.aws_bedrock.calculate_similarity(prompt_embedding, embedding)
+            # self.logger.info(f"Table '{table_name}' similarity: {similarity}")
+            if similarity > max_similarity:
+                max_similarity = similarity
+        self.logger.info(f"Maximum table similarity: {max_similarity}")
+        return max_similarity > 0.3  # Use a threshold to determine relevance
 
     def handle_schema_query(self, user_prompt):
         response = []
@@ -137,15 +132,20 @@ class SQLGenerator:
         return "\n".join(response)
     
     def generate_sql_query(self, user_prompt):
+        self.logger.info(f"Received user prompt: '{user_prompt}'")  # Log the received prompt
+        
         if self.is_prompt_related_to_schema(user_prompt):
             self.logger.info(f"The user prompt '{user_prompt}' is related to schema. Handling as schema query.")
             return None
+        
         if not self.is_prompt_related_to_tables(user_prompt):
             self.logger.info(f"The user prompt '{user_prompt}' is not related to the tables. Returning direct response.")
             return None
+        
         prompt = get_sql_generation_prompt(self.schema_description, user_prompt)
         response = self.chatbot(prompt)
         self.logger.info(f"Generated SQL query for prompt: {user_prompt}")
+        
         return response
 
     def generate_direct_response(self, user_prompt):
@@ -210,7 +210,8 @@ class QueryExecutor:
 
 class TextToSQLAgent:
     def __init__(self, data_catalog_path='data_catalog.json', data_folder='data', max_retries=3):
-        init_logger()
+        self.logger = init_logger()  # Initialize logging and store logger instance
+        self.logger.info("Initializing TextToSQLAgent...")  # Log initialization
         self.data_catalog = CentralDataCatalog()
         self.data_catalog.load_from_json(data_catalog_path)
         self.dataframes = self.load_sample_data(data_folder)
@@ -218,6 +219,7 @@ class TextToSQLAgent:
         self.sql_generator = SQLGenerator(self.aws_bedrock, self.dataframes, self.data_catalog)
         self.materialized_view_manager = MaterializedViewManager()
         self.query_executor = QueryExecutor(self.dataframes, self.sql_generator, max_retries)
+        self.logger.info("TextToSQLAgent initialized successfully.")
 
     def load_sample_data(self, data_folder):
         dataframes = {}
@@ -238,12 +240,7 @@ class TextToSQLAgent:
         return text_response
     
 if __name__ == "__main__":
-    # Initialize the TextToSQLAgent
     agent = TextToSQLAgent()
-
-    # Example user prompt
     user_prompt = "what are the tables"
-
-    # Process the prompt and get the result
     result = agent.process_prompt(user_prompt)
     print(result)
