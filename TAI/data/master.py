@@ -148,7 +148,6 @@ class DataMaster:
         except Exception as e:
             logging.error(f"Error loading from S3: {e}")
 
-
 # Example usage:
 if __name__ == "__main__":
     aws_session = boto3.Session()

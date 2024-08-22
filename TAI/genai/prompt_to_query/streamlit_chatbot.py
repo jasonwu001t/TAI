@@ -28,7 +28,7 @@ for message in st.session_state.chat_history:
         st.markdown(message["content"])
 
 if prompt := st.chat_input('Ask me anything about the database...'):
-    st.session_state.chat_history.append({'role': 'user', 'content': prompt})
+    # st.session_state.chat_history.append({'role': 'user', 'content': prompt})
     with st.chat_message('human'):
         st.markdown(prompt)
 
@@ -36,10 +36,17 @@ if prompt := st.chat_input('Ask me anything about the database...'):
     conversation_context = "\n".join([f"{msg['role']}: {msg['content']}" for msg in st.session_state.chat_history])
     
     # Process the user prompt with TextToSQLAgent including conversation context
-    result = agent.process_prompt(f"{conversation_context}\nuser: {prompt}")
+    # print ('------------------------------------------------')
+    # print(f'{conversation_context}\nuser: {prompt}')
+    # print ('------------------------------------------------')
+    # print ('+++++++++++++++++++++++++++++++++++++++++++++++++')
+    result = agent.process_prompt(f"user: {prompt}")
+    # print ('+++++++++++++++++++++++++++++++++++++++++++++++++')
 
     # Display the chat response
     with st.chat_message('ai'):
+
         st.markdown(result)
+       
 
     st.session_state.chat_history.append({"role": "ai", "content": result})

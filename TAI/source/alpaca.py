@@ -16,6 +16,7 @@ from alpaca.data.requests import (StockBarsRequest,
                                 OptionLatestTradeRequest,
                                 )
 from alpaca.data.timeframe import TimeFrame,TimeFrameUnit
+
 from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import (MarketOrderRequest, GetOrdersRequest,
                                     GetAssetsRequest,GetOptionContractsRequest
@@ -78,7 +79,7 @@ class Alpaca:
         df = pd.DataFrame(option_contracts)
         return df
     
-    def get_option_chain(self, symbol_or_symbols,
+    def get_option_chain(self, underlying_symbols, #list only ['SPY']
                         expiration_date = None, #'2024-08-30'
                         expiration_date_gte = None,
                         expiration_date_lte = None,
@@ -92,16 +93,15 @@ class Alpaca:
         """the output is alpaca.trading.models.OptionContractsResponse instead of raw json
          Try quote.prce instead of quote['price']. If you need a raw json access, you can do quote._raw['price']
         """
-        underlying_symbols = symbol_or_symbols  # list of symboles
         req1 = GetOptionContractsRequest(
                 underlying_symbols = underlying_symbols,               # specify underlying symbols
                 status = AssetStatus.ACTIVE,                           # specify asset status: active (default)
-                expiration_date = expiration_date,                                # specify expiration date (specified date + 1 day range)
-                expiration_date_gte = expiration_date_gte,                            # we can pass date object
-                expiration_date_lte = expiration_date_lte,                            # or string (YYYY-MM-DD)
-                root_symbol = root_symbol,                                    # specify root symbol
-                type = type,                                           # specify option type (ContractType.CALL or ContractType.PUT)
-                style = style,                                          # specify option style (ContractStyle.AMERICAN or ContractStyle.EUROPEAN)
+                expiration_date = expiration_date,                     # specify expiration date (specified date + 1 day range)
+                expiration_date_gte = expiration_date_gte,     #Great or Equal To     # we can pass date object
+                expiration_date_lte = expiration_date_lte,     #Less or equatl To     # or string (YYYY-MM-DD)
+                root_symbol = root_symbol,               # specify root symbol
+                type = type,                              # specify option type (ContractType.CALL or ContractType.PUT)
+                style = style,                          # specify option style (ContractStyle.AMERICAN or ContractStyle.EUROPEAN)
                 strike_price_gte = strike_price_get,                               # specify strike price range
                 strike_price_lte = strike_price_lte,                               # specify strike price range
                 limit = limit,                                             # specify limit
@@ -109,51 +109,52 @@ class Alpaca:
                 )
         res1 = self.trade_client.get_option_contracts(req1)
         res_df1 = self.option_chain_to_df(res1)
+        return res_df1
         
-        if res1.next_page_token is not None:
-            req2 = GetOptionContractsRequest(
-                underlying_symbols = underlying_symbols,               # specify underlying symbols
-                status = AssetStatus.ACTIVE,                           # specify asset status: active (default)
-                expiration_date = expiration_date,                                # specify expiration date (specified date + 1 day range)
-                expiration_date_gte = expiration_date_gte,                            # we can pass date object
-                expiration_date_lte = expiration_date_lte,                            # or string (YYYY-MM-DD)
-                root_symbol = root_symbol,                                    # specify root symbol
-                type = type,                                           # specify option type (ContractType.CALL or ContractType.PUT)
-                style = style,                                          # specify option style (ContractStyle.AMERICAN or ContractStyle.EUROPEAN)
-                strike_price_gte = strike_price_get,                               # specify strike price range
-                strike_price_lte = strike_price_lte,                               # specify strike price range
-                limit = limit,                                             # specify limit
-                page_token = self.res1.next_page_token,                      # specify page token
-            )
-        res2 = self.trade_client.get_option_contracts(req2)
-        res_df2 = self.option_chain_to_df(res2)
-        # Union res_df1 and res_df2
+        # if res1.next_page_token is not None:
+        #     req2 = GetOptionContractsRequest(
+        #         underlying_symbols = underlying_symbols,               # specify underlying symbols
+        #         status = AssetStatus.ACTIVE,                           # specify asset status: active (default)
+        #         expiration_date = expiration_date,                                # specify expiration date (specified date + 1 day range)
+        #         expiration_date_gte = expiration_date_gte,                            # we can pass date object
+        #         expiration_date_lte = expiration_date_lte,                            # or string (YYYY-MM-DD)
+        #         root_symbol = root_symbol,                                    # specify root symbol
+        #         type = type,                                           # specify option type (ContractType.CALL or ContractType.PUT)
+        #         style = style,                                          # specify option style (ContractStyle.AMERICAN or ContractStyle.EUROPEAN)
+        #         strike_price_gte = strike_price_get,                               # specify strike price range
+        #         strike_price_lte = strike_price_lte,                               # specify strike price range
+        #         limit = limit,                                             # specify limit
+        #         page_token = self.res1.next_page_token,                      # specify page token
+        #     )
+        # res2 = self.trade_client.get_option_contracts(req2)
+        # res_df2 = self.option_chain_to_df(res2)
+        # # Union res_df1 and res_df2
 
-    def get_last_quote(self, symbol, asset='stock'): #bid,ask, mid?
+    def get_lastest_quote(self, symbol_or_symbols, asset='stock'): #bid,ask, mid, if option, need to use option_symbol_or_symbols
         if asset == 'stock':
-            req = StockLatestQuoteRequest(symbol=symbol)
+            req = StockLatestQuoteRequest(symbol_or_symbols=symbol_or_symbols)
             return self.stock_md_client.get_stock_latest_quote(req)
         if asset == 'option': # get option latest quote by symbol
             req = OptionLatestQuoteRequest(
-                symbol_or_symbols = [symbol],
+                symbol_or_symbols = symbol_or_symbols,
             )
-            req = OptionLatestQuoteRequest(symbol_or_symbols=[symbol]) #eg. SPY240805P00540000
+            req = OptionLatestQuoteRequest(symbol_or_symbols=symbol_or_symbols) #eg. SPY240805P00540000
             return self.option_md_client.get_option_latest_quote(req)
         
-    def get_latest_trade(self, symbol, asset='stock'):
+    def get_latest_trade(self, symbol_or_symbols, asset='stock'):
         if asset == 'stock':
-            req = StockLatestTradeRequest(symbol=symbol)
+            req = StockLatestTradeRequest(symbol_or_symbols=symbol_or_symbols)
             return self.stock_md_client.get_stock_latest_trade(req)
         if asset == 'option': # get option latest trade by symbol
             req = OptionLatestTradeRequest(
-                symbol_or_symbols = [symbol],
+                symbol_or_symbols = symbol_or_symbols,
             )
             return self.option_md_client.get_option_latest_trade(req)
 
-    def get_option_historical(self, symbol,bars_or_trades='bars'): #for the same contract at different historical date
+    def get_option_historical(self, option_symbol_or_symbols,bars_or_trades='bars'): ## eg ['SPY240830C00550000','SPY240830P00559000'] , for the same contract at different historical date 
         if bars_or_trades == 'bars': # get options historical bars by symbol
             req = OptionBarsRequest(
-                symbol_or_symbols = symbol,
+                symbol_or_symbols = option_symbol_or_symbols,
                 timeframe = TimeFrame(amount = 1, unit = TimeFrameUnit.Hour),   # specify timeframe
                 start = self.now - timedelta(days = 5),    #data starts 5 days ago  # specify start datetime, default=the beginning of the current day.
                 # end_date=None,                                                # specify end datetime, default=now
@@ -164,7 +165,7 @@ class Alpaca:
         
         if bars_or_trades =='trades': # get options historical trades by symbol
             req = OptionTradesRequest(
-                symbol_or_symbols = symbol,
+                symbol_or_symbols = option_symbol_or_symbols,
                 start = self.now - timedelta(days = 5),                              # specify start datetime, default=the beginning of the current day.
                 # end=None,                                                     # specify end datetime, default=now
                 limit = None,                                                      # specify limit
@@ -205,10 +206,6 @@ class Alpaca:
         )
         return self.stock_md_client.get_stock_bars(request_params)
 
-    def get_last_trade(self, symbol):
-        request_params = StockLatestTradeRequest(symbol=symbol)
-        return self.stock_md_client.get_stock_latest_trade(request_params)
-
 
 if __name__ == "__main__":
     alpaca = Alpaca()
@@ -231,9 +228,3 @@ if __name__ == "__main__":
 
     # barset = alpaca.get_barset(['AAPL'], 'Day', 5)
     # print(f"Barset: {barset}")
-
-    last_trade = alpaca.get_last_trade('AAPL')
-    print(f"Last Trade: {last_trade}")
-
-    last_quote = alpaca.get_last_quote('AAPL')
-    print(f"Last Quote: {last_quote}")
