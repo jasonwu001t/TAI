@@ -204,7 +204,7 @@ class Alpaca:
         return self.trade_client.get_orders(filter=orders_request)
 
     # Market Data Handler # TimeFrame(amount = 1, unit = TimeFrameUnit.Hour)
-    def get_stock_histoprical(self, symbol_or_symbols, limit, raw=False):
+    def get_stock_historical(self, symbol_or_symbols, limit, raw=False):
         """
         Need to update parameters
         """
