@@ -151,13 +151,19 @@ class Alpaca:
             )
             return self.option_md_client.get_option_latest_trade(req)
 
-    def get_option_historical(self, option_symbol_or_symbols,bars_or_trades='bars'): ## eg ['SPY240830C00550000','SPY240830P00559000'] , for the same contract at different historical date 
+    def get_option_historical(self, 
+                              option_symbol_or_symbols,
+                              past_days = 5,
+                              bars_or_trades='bars'): ## eg ['SPY240830C00550000','SPY240830P00559000'] , for the same contract at different historical date
+        """
+        Need to update parameters
+        """ 
         if bars_or_trades == 'bars': # get options historical bars by symbol
             req = OptionBarsRequest(
                 symbol_or_symbols = option_symbol_or_symbols,
                 timeframe = TimeFrame(amount = 1, unit = TimeFrameUnit.Hour),   # specify timeframe
-                start = self.now - timedelta(days = 5),    #data starts 5 days ago  # specify start datetime, default=the beginning of the current day.
-                # end_date=None,                                                # specify end datetime, default=now
+                start = self.now - timedelta(days = past_days),    #data starts 5 days ago  # specify start datetime, default=the beginning of the current day.
+                # end_date=end_date,                                                # specify end datetime, default=now
                 limit = None,                                                      # specify limit
             )
             result = self.option_md_client.get_option_bars(req).df
@@ -166,8 +172,8 @@ class Alpaca:
         if bars_or_trades =='trades': # get options historical trades by symbol
             req = OptionTradesRequest(
                 symbol_or_symbols = option_symbol_or_symbols,
-                start = self.now - timedelta(days = 5),                              # specify start datetime, default=the beginning of the current day.
-                # end=None,                                                     # specify end datetime, default=now
+                start = self.now - timedelta(days = past_days),                              # specify start datetime, default=the beginning of the current day.
+                # end=end_date,                                                     # specify end datetime, default=now
                 limit = None,                                                      # specify limit
                 )
             result = self.option_md_client.get_option_trades(req).df
@@ -197,15 +203,22 @@ class Alpaca:
         orders_request = GetOrdersRequest(status=status, limit=limit)
         return self.trade_client.get_orders(filter=orders_request)
 
-    # Market Data Handler
-    def get_barset(self, symbols, timeframe, limit):
+    # Market Data Handler # TimeFrame(amount = 1, unit = TimeFrameUnit.Hour)
+    def get_stock_histoprical(self, symbol_or_symbols, limit, raw=False):
+        """
+        Need to update parameters
+        """
         request_params = StockBarsRequest(
-            symbol_or_symbols=symbols,
-            timeframe=TimeFrame(timeframe),
+            symbol_or_symbols=symbol_or_symbols,
+            timeframe=TimeFrame.Day, #TimeFrame(timeframe), .Min, Hour, Day, Week, Month
+            start = self.now - timedelta(days = 5),
             limit=limit
         )
-        return self.stock_md_client.get_stock_bars(request_params)
-
+        res =  self.stock_md_client.get_stock_bars(request_params)
+        if raw == True: # raw is json object
+            return res
+        else:
+            return res.df.reset_index()[['symbol','timestamp','open','high','low','close','volume','trade_count','vwap']]
 
 if __name__ == "__main__":
     alpaca = Alpaca()
@@ -213,6 +226,8 @@ if __name__ == "__main__":
     # Example usage
     account = alpaca.get_account()
     print(f"Account: {account}")
+
+    alpaca.get_barset('spy',2)
 
     positions = alpaca.get_positions()
     print(f"Positions: {positions}")
@@ -225,6 +240,3 @@ if __name__ == "__main__":
 
     orders = alpaca.get_orders()
     print(f"Orders: {orders}")
-
-    # barset = alpaca.get_barset(['AAPL'], 'Day', 5)
-    # print(f"Barset: {barset}")
