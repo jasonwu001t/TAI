@@ -21,7 +21,7 @@ from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import (MarketOrderRequest, GetOrdersRequest,
                                     GetAssetsRequest,GetOptionContractsRequest
                                     )
-from alpaca.trading.enums import OrderSide, TimeInForce, AssetStatus
+from alpaca.trading.enums import OrderSide, TimeInForce, AssetStatus, ContractType
 
 
 class AlpacaAuth:

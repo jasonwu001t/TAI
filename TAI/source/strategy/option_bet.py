@@ -49,6 +49,7 @@ class OptionBet:
             'projected_price': 'projected_price',
             'chose_strike': 'chose_strike'
         })
+        self.ib.disconnect() #disconnect the session each time
         return describe[['current_price', 'percentage_change', 'projected_price', 'chose_strike']]
 
 # Example usage
