@@ -1,14 +1,17 @@
 {
     "users": {
         "description": "User details including ID, name, and email.",
+        "columns" : ["ID", "name", "email"],
         "embedding": "user_embedding_vector"
     },
     "orders": {
         "description": "Order details including ID, user ID, product ID, quantity, and order date.",
+        "columns" : [],
         "embedding": "order_embedding_vector"
     },
     "products": {
         "description": "Product details including ID, name, and price.",
+        "columns" : [],
         "embedding": "product_embedding_vector"
     }
 }

@@ -17,9 +17,9 @@ class CentralDataCatalog:
             data = json.load(f)
             for table_name, info in data.items():
                 self.add_table(
-                    table_name,
-                    info.get('description', ''),
-                    info.get('embedding', None)
+                    table_name = table_name,
+                    description = info.get('description', ''),
+                    embedding = info.get('embedding', None)
                 )
 
     def add_table(self, table_name, description, embedding=None):
@@ -40,12 +40,12 @@ class CentralDataCatalog:
             self.schema_embeddings[keyword] = aws_bedrock.generate_embedding(keyword)
         
         # Generate table embeddings
-        for table_name in self.list_tables():
-            table_info = self.get_catalog_info(table_name)
+        for table_name in self.list_tables(): 
+            table_info = self.get_catalog_info(table_name) # returned json description and embedding items
             if table_info:
                 table_text = f"{table_name}: {table_info['description']}"
-                self.table_embeddings[table_name] = aws_bedrock.generate_embedding(table_text)
-                for col in table_info.get('columns', []):
+                self.table_embeddings[table_name] = aws_bedrock.generate_embedding(table_text) #converted json table and description to Array
+                for col in table_info.get('columns', []): #THE COLUMNS ARE NOT DEFINED IN JSON FILE YET, Need to read from file directly
                     col_text = f"{table_name}.{col}"
                     self.table_embeddings[col_text] = aws_bedrock.generate_embedding(col_text)
 
@@ -98,6 +98,9 @@ class SQLGenerator:
         return "; ".join(descriptions)
 
     def is_prompt_related_to_schema(self, user_prompt):
+        """
+        The Schema Embedding is based on keyword defined in generate_embeddings function
+        """
         prompt_embedding = self.aws_bedrock.generate_embedding(user_prompt)
         max_similarity = 0
         for keyword, embedding in self.data_catalog.schema_embeddings.items():
@@ -106,7 +109,7 @@ class SQLGenerator:
             if similarity > max_similarity:
                 max_similarity = similarity
         self.logger.info(f"Maximum schema similarity: {max_similarity}")
-        return max_similarity > 0.7  # Use a threshold to determine relevance
+        return max_similarity > 0.7  # Use a threshold to determine relevance, return True, False
 
     def is_prompt_related_to_tables(self, user_prompt):
         prompt_embedding = self.aws_bedrock.generate_embedding(user_prompt)
@@ -117,7 +120,7 @@ class SQLGenerator:
             if similarity > max_similarity:
                 max_similarity = similarity
         self.logger.info(f"Maximum table similarity: {max_similarity}")
-        return max_similarity > 0.3  # Use a threshold to determine relevance
+        return max_similarity > 0.3  # Use a threshold to determine relevance, return True, False
 
     def handle_schema_query(self, user_prompt):
         response = []

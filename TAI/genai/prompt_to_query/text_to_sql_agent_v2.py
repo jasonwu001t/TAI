@@ -9,25 +9,26 @@ from utils import init_logger, get_sql_generation_prompt, get_direct_response_pr
 class CentralDataCatalog:
     def __init__(self):
         self.catalog = {}
-        self.schema_embeddings = {}
-        self.table_embeddings = {}
+        self.embeddings = {}  # Unified embeddings dictionary
 
     def load_from_json(self, json_file):
         with open(json_file, 'r') as f:
             data = json.load(f)
             for table_name, info in data.items():
                 self.add_table(
-                    table_name,
-                    info.get('description', ''),
-                    info.get('embedding', None)
+                    table_name=table_name,
+                    description=info.get('description', ''),
+                    embedding=info.get('embedding', None),
+                    columns=info.get('columns', [])
                 )
 
-    def add_table(self, table_name, description, embedding=None):
+    def add_table(self, table_name, description, embedding=None, columns=None):
         self.catalog[table_name] = {
             'description': description,
-            'embedding': embedding
+            'embedding': embedding,
+            'columns': columns
         }
-
+        
     def get_catalog_info(self, table_name):
         return self.catalog.get(table_name, None)
 
@@ -35,110 +36,78 @@ class CentralDataCatalog:
         return list(self.catalog.keys())
 
     def generate_embeddings(self, aws_bedrock):
-        # Generate schema embeddings
-        for keyword in ["schema", "tables", "description", "records", "loaded tables", "table description"]:
-            self.schema_embeddings[keyword] = aws_bedrock.generate_embedding(keyword)
+        schema_keywords = ["schema", "tables", "description", "records", "loaded tables", "table description"]
+        for keyword in schema_keywords:
+            self.embeddings[f"schema:{keyword}"] = aws_bedrock.generate_embedding(keyword)
         
-        # Generate table embeddings
-        for table_name in self.list_tables():
-            table_info = self.get_catalog_info(table_name)
-            if table_info:
-                table_text = f"{table_name}: {table_info['description']}"
-                self.table_embeddings[table_name] = aws_bedrock.generate_embedding(table_text)
-                for col in table_info.get('columns', []):
-                    col_text = f"{table_name}.{col}"
-                    self.table_embeddings[col_text] = aws_bedrock.generate_embedding(col_text)
-
-class MaterializedViewManager:
-    def __init__(self):
-        self.views = {}
-
-    def create_view(self, name, query, data):
-        result = data.lazy().sql(query).collect()
-        self.views[name] = result
-
-    def refresh_view(self, name, query, data):
-        result = data.lazy().sql(query).collect()
-        self.views[name] = result
-
-    def get_view(self, name):
-        return self.views.get(name, None)
-
-    def view_exists(self, name):
-        return name in self.views
+        for table_name, table_info in self.catalog.items():
+            table_text = f"{table_name}: {table_info['description']}"
+            self.embeddings[f"table:{table_name}"] = aws_bedrock.generate_embedding(table_text)
+            for col in table_info.get('columns', []):
+                col_text = f"{table_name}.{col}"
+                self.embeddings[f"table:{table_name}.{col}"] = aws_bedrock.generate_embedding(col_text)
 
 class SQLGenerator:
-    def __init__(self, aws_bedrock, dataframes, data_catalog):
+    def __init__(self, aws_bedrock, dataframes, data_catalog, schema_threshold=0.7, table_threshold=0.3):
         self.aws_bedrock = aws_bedrock
         self.dataframes = dataframes
         self.data_catalog = data_catalog
         self.schema_description = self.generate_schema_description()
         self.logger = logging.getLogger('TextToSQL')
-        self.logger.info("SQLGenerator initialized successfully.")  # Log at initialization
+        self.logger.info("SQLGenerator initialized successfully.")
 
-        self.agent_id = ""
-        self.agent_alias_id = ""
+        self.schema_threshold = schema_threshold  # Set schema threshold
+        self.table_threshold = table_threshold  # Set table threshold
+
         self.session_id = str(uuid.uuid4())
-
-        # Generate embeddings for schema and table
         self.data_catalog.generate_embeddings(self.aws_bedrock)
-
 
     def chatbot(self, prompt):
         response = self.aws_bedrock.generate_text(prompt)
         return response['response']
+    
+    def check_prompt_relation(self, user_prompt, context="schema", threshold=0.7):
+        prompt_embedding = self.aws_bedrock.generate_embedding(user_prompt)
+        max_similarity = max(
+                            self.aws_bedrock.calculate_similarity(prompt_embedding, embedding)
+                            for key, embedding in self.data_catalog.embeddings.items()
+                                if key.startswith(context)
+                        )
+        return max_similarity > threshold, max_similarity
 
     def generate_schema_description(self):
-        descriptions = []
-        for table_name, df in self.dataframes.items():
-            table_info = self.data_catalog.get_catalog_info(table_name)
-            table_description = table_info['description'] if table_info else "No description available."
-            columns = ", ".join(df.columns)
-            descriptions.append(f"Table {table_name} ({columns}): {table_description}")
+        descriptions = [
+            f"Table {table_name} ({', '.join(df.columns)}): {self.data_catalog.get_catalog_info(table_name)['description']}"
+            for table_name, df in self.dataframes.items()
+        ]
         return "; ".join(descriptions)
 
-    def is_prompt_related_to_schema(self, user_prompt):
-        prompt_embedding = self.aws_bedrock.generate_embedding(user_prompt)
-        max_similarity = 0
-        for keyword, embedding in self.data_catalog.schema_embeddings.items():
-            similarity = self.aws_bedrock.calculate_similarity(prompt_embedding, embedding)
-            # self.logger.info(f"Schema keyword '{keyword}' similarity: {similarity}")
-            if similarity > max_similarity:
-                max_similarity = similarity
-        self.logger.info(f"Maximum schema similarity: {max_similarity}")
-        return max_similarity > 0.7  # Use a threshold to determine relevance
-
-    def is_prompt_related_to_tables(self, user_prompt):
-        prompt_embedding = self.aws_bedrock.generate_embedding(user_prompt)
-        max_similarity = 0
-        for table_name, embedding in self.data_catalog.table_embeddings.items():
-            similarity = self.aws_bedrock.calculate_similarity(prompt_embedding, embedding)
-            # self.logger.info(f"Table '{table_name}' similarity: {similarity}")
-            if similarity > max_similarity:
-                max_similarity = similarity
-        self.logger.info(f"Maximum table similarity: {max_similarity}")
-        return max_similarity > 0.7  # Use a threshold to determine relevance
+    def is_prompt_related(self, user_prompt, context="schema"):
+        threshold = self.schema_threshold if context == "schema" else self.table_threshold
+        related, max_similarity = self.check_prompt_relation(
+            user_prompt, context=context, threshold=threshold
+        )
+        self.logger.info(f"Maximum {context} similarity: {max_similarity}")
+        return related
 
     def handle_schema_query(self, user_prompt):
         response = []
         if "all tables" in user_prompt.lower() or "loaded tables" in user_prompt.lower():
-            table_list = self.data_catalog.list_tables()
-            response.append(f"The following tables have been loaded: {', '.join(table_list)}.")
+            response.append(f"The following tables have been loaded: {', '.join(self.data_catalog.list_tables())}.")
         for table_name, df in self.dataframes.items():
             table_info = self.data_catalog.get_catalog_info(table_name)
-            table_description = table_info['description'] if table_info else "No description available."
             record_count = df.shape[0]
-            response.append(f"Table '{table_name}' has {record_count} records. Description: {table_description}.")
+            response.append(f"Table '{table_name}' has {record_count} records. Description: {table_info['description']}.")
         return "\n".join(response)
     
     def generate_sql_query(self, user_prompt):
-        self.logger.info(f"Received user prompt: '{user_prompt}'")  # Log the received prompt
+        self.logger.info(f"Received user prompt: '{user_prompt}'")
         
-        if self.is_prompt_related_to_schema(user_prompt):
+        if self.is_prompt_related(user_prompt, context="schema"):
             self.logger.info(f"The user prompt '{user_prompt}' is related to schema. Handling as schema query.")
             return None
         
-        if not self.is_prompt_related_to_tables(user_prompt):
+        if not self.is_prompt_related(user_prompt, context="table"):
             self.logger.info(f"The user prompt '{user_prompt}' is not related to the tables. Returning direct response.")
             return None
         
@@ -172,7 +141,7 @@ class QueryExecutor:
             return None
 
     def validate_and_execute(self, user_prompt):
-        if self.sql_generator.is_prompt_related_to_schema(user_prompt):
+        if self.sql_generator.is_prompt_related(user_prompt, context="schema"):
             schema_response = self.sql_generator.handle_schema_query(user_prompt)
             return None, schema_response
         
@@ -209,15 +178,14 @@ class QueryExecutor:
         return text_response
 
 class TextToSQLAgent:
-    def __init__(self, data_catalog_path='data_catalog.json', data_folder='data', max_retries=3):
-        self.logger = init_logger()  # Initialize logging and store logger instance
-        self.logger.info("Initializing TextToSQLAgent...")  # Log initialization
+    def __init__(self, data_catalog_path='data_catalog_processed.json', data_folder='data', max_retries=3, schema_threshold=0.7, table_threshold=0.3):
+        self.logger = init_logger()
+        self.logger.info("Initializing TextToSQLAgent...")
         self.data_catalog = CentralDataCatalog()
         self.data_catalog.load_from_json(data_catalog_path)
         self.dataframes = self.load_sample_data(data_folder)
         self.aws_bedrock = AWSBedrock()
-        self.sql_generator = SQLGenerator(self.aws_bedrock, self.dataframes, self.data_catalog)
-        self.materialized_view_manager = MaterializedViewManager()
+        self.sql_generator = SQLGenerator(self.aws_bedrock, self.dataframes, self.data_catalog, schema_threshold, table_threshold)
         self.query_executor = QueryExecutor(self.dataframes, self.sql_generator, max_retries)
         self.logger.info("TextToSQLAgent initialized successfully.")
 
@@ -241,6 +209,6 @@ class TextToSQLAgent:
     
 if __name__ == "__main__":
     agent = TextToSQLAgent()
-    user_prompt = "what are the tables"
+    user_prompt = "who are the tables"
     result = agent.process_prompt(user_prompt)
     print(result)
