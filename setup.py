@@ -33,7 +33,10 @@ setup(
         'langchain_aws',
         'langchain_community',
         'slack_bolt',
-        'polars'
+        'polars',
+        'torch',
+        'torchvision',
+        'sentence_transformers'
     ],
     classifiers=[
         "Programming Language :: Python :: 3",

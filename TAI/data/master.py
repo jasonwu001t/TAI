@@ -1,12 +1,15 @@
 # data_master.py
 from TAI.utils import ConfigLoader
-import os, sys, inspect
-import pandas as pd
+
+import json, os, sys, inspect, logging
 from datetime import datetime
+
+import pandas as pd
+import polars as pl
+import psycopg2
+
 import boto3
 from botocore.exceptions import NoCredentialsError
-import psycopg2
-import logging
 
 logging.basicConfig(level=logging.INFO)
 
@@ -117,6 +120,47 @@ class DataMaster:
 
     def set_s3_client(aws_session=None):
         return aws_session.client('s3') if aws_session else None
+    
+    def list_files_in_directory(data_folder):
+        # Initialize an empty list to store the filenames
+        # # Example usage
+        # directory_path = '/path/to/your/directory'  # Replace with your directory path
+        # file_list = list_files_in_directory(directory_path)
+        # print(file_list)
+
+        file_list = []
+        for root, dirs, files in os.walk(data_folder):  # Walk through the directory
+            for file in files:   # Check if the file ends with .csv or .parquet
+                if file.endswith('.csv') or file.endswith('.parquet'):
+                    file_list.append(file)   # Append the filename to the list
+        return file_list
+
+    def polars_load_dfs(self, data_folder,list_tables=None, load_all=True): #if list_tables have value, load_all has to be False
+        if load_all == True:
+            list_tables = self.list_files_in_directory(data_folder)
+        else:
+            list_tables = list_tables
+
+        dataframes = {}
+        for table_name in list_tables:
+            csv_file = os.path.join(data_folder, f'{table_name}.csv')
+            parquet_file = os.path.join(data_folder, f'{table_name}.parquet')
+            if os.path.exists(csv_file):
+                dataframes[table_name] = pl.read_csv(csv_file)
+            elif os.path.exists(parquet_file):
+                dataframes[table_name] = pl.read_parquet(parquet_file)
+            else:
+                raise FileNotFoundError(f"No data file found for table '{table_name}' in folder '{data_folder}'.")
+        return dataframes
+    
+    def polars_run_query(self, polars_dfs, sql_query):
+        # example : porlars_run_query(dfs, """SELECT * FROM table1""")
+        context = pl.SQLContext(self.polars_dfs)
+        try:
+            result = context.execute(sql_query).collect()
+            return result
+        except Exception as e:
+            raise f"Query execution error: {e}"
 
     def load_from_local(self, file_name, file_format, base_path='in_dir'):
         if base_path =='in_dir':
@@ -147,6 +191,32 @@ class DataMaster:
                 return pd.read_parquet(obj['Body'])
         except Exception as e:
             logging.error(f"Error loading from S3: {e}")
+
+class Embedding: #STILL WORKING IN PROGRESS
+    def __init__(self, aws_bedrock, config_file):
+        """
+        Init Embedding with json config file.
+        """
+        with open(config_file, 'r') as file:
+            config = json.load(file)
+        
+        self.aws_bedrock = aws_bedrock
+        self.text_embedding_method = self._get_embedding_method(config['text'])
+        self.table_embedding_method = self._get_embedding_method(config['table'])
+        self.table_embeddings = {}
+
+    def _get_embedding_method(self, form):
+        """ get embedding method from JSON file, methods are different between text and table embedding """
+        if form == 'sentence_transformers':
+            return self._sentence_transformer_embedding
+        elif form == 'aws_bedrock':
+            return self._aws_bedrock_embedding
+        else:
+            raise ValueError(f"Unknown embedding method: {form}")
+
+    def generate_embedding(self, form, method, text_input):
+        embedding_array = self.aws_bedrock.generate_embedding(text_input)
+        pass
 
 # Example usage:
 if __name__ == "__main__":
