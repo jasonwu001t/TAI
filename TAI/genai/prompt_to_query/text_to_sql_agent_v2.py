@@ -4,7 +4,7 @@ import json
 import logging
 import uuid
 from TAI.genai import AWSBedrock
-from utils import init_logger, get_sql_generation_prompt, get_direct_response_prompt
+from .utils import init_logger, get_sql_generation_prompt, get_direct_response_prompt
 
 class CentralDataCatalog:
     def __init__(self):
