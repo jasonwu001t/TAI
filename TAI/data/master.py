@@ -120,41 +120,32 @@ class DataMaster:
             raise ValueError(f"Unsupported file format: {type}")
         
     def list_files(self, data_folder: str, 
-                                from_s3: bool = False, 
-                                aws_region: str = 'us-west-2'):
+                        from_s3: bool = False, 
+                        aws_region: str = 'us-west-2'):
         """
         Lists all CSV and Parquet file names from a local directory or a selected S3 folder.
-
         Parameters:
         - data_folder: Path to the local directory or 'bucket_name/s3_directory' if from_s3 is True.
         - from_s3: If True, list files from S3. If False, list files from the local directory.
         - aws_region: The AWS region where the S3 bucket is located (default: 'us-east-1').
-
         Returns:
         - A list of file names from the specified data source (local directory or S3).
         """
         file_list = []
-
-        if from_s3:
-            # Parse the bucket name and S3 directory from data_folder
+        if from_s3:   # Parse the bucket name and S3 directory from data_folder
             bucket_name, s3_directory = data_folder.split('/', 1)
-            
-            # Initialize S3 client
-            s3_client = boto3.client('s3', region_name=aws_region)
+            s3_client = boto3.client('s3', region_name=aws_region)  # Initialize S3 client
             list_objects = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=s3_directory)
-            
             if 'Contents' in list_objects:
                 for obj in list_objects['Contents']:
                     s3_file = obj['Key']
                     if s3_file.endswith('.csv') or s3_file.endswith('.parquet'):
                         file_list.append(os.path.basename(s3_file))  # Append only the file name to the list
-        else:
-            # List files from the local directory
+        else:   # List files from the local directory
             for root, dirs, files in os.walk(data_folder):
                 for file in files:
                     if file.endswith('.csv') or file.endswith('.parquet'):
                         file_list.append(file)  # Append only the file name to the list
-
         return file_list
     # ls = list_files('jtrade1-dir/data/dd', from_s3=True)
     # print(ls)
@@ -162,13 +153,11 @@ class DataMaster:
     def load_file(self, path, use_polars, is_s3=False, s3_client=None):
         """
         Helper function to load a single file, either from a local path or from S3.
-
         Parameters:
         - path: The local path or S3 key to the file.
         - use_polars: Whether to use Polars instead of Pandas.
         - is_s3: If True, load the file from S3.
         - s3_client: The Boto3 S3 client, required if is_s3 is True.
-
         Returns:
         - A DataFrame (Polars or Pandas) loaded from the file.
         """
