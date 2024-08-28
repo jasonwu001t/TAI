@@ -21,6 +21,6 @@ langchain_aws
 langchain_community
 slack_bolt
 polars
-torch
-torchvision
-sentence_transformers
+# torch
+# torchvision
+# sentence_transformers

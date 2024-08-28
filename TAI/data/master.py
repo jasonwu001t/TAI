@@ -74,51 +74,86 @@ class DataMaster:
         except IndexError: # Fallback: if there's any issue, return the current working directory
             return os.getcwd()
 
-    def create_dir(self, full_path=None, dir_name="data"): # dir_name = "" to save to the current dir
+    def create_dir(self, method: str = 'data', 
+                parent_dir: str = '.', 
+                bucket_name: str = None, 
+                s3_directory: str = '', 
+                aws_region: str = 'us-west-2', 
+                is_s3: bool = False):
         """
-        If full_path is not provided, create a "data" folder (default, but can change) 
-        under the directory where the user's script is run. 
-        The full_path should include the folder name, not a file name.
-        If the folder already exists, it does nothing.
-        """
-        if full_path == None:            # Use current folder as the base path
-            folder_path = os.path.join(self.get_current_dir(), dir_name)
-        else:
-            folder_path == full_path
-    
-        if not os.path.exists(folder_path):        # Create the folder if it doesn't exist
-            os.makedirs(folder_path)
-            print(f"Folder created: {folder_path}")
-        else:
-            print(f"Folder already exists: {folder_path}")
+        Creates a directory either locally or in S3 based on the specified method.
 
-    def save_data(self, 
-                df, 
-                file_name,
-                type="parquet",
-                dir_name="data", 
-                how = "in_dir"): # in_dir, or calendar
-        # locate the data folder
-        default_path = os.path.join(self.get_current_dir(), dir_name)
-        # print (default_path)
-        if how =='calendar':
-            today = datetime.now()
-            year, month, day = today.year, today.month, today.day
-            dir_path = os.path.join(default_path, f"{year}", f"{month:02d}", f"{day:02d}")
-            # print (dir_path)
-            os.makedirs(dir_path, exist_ok=True)
-        if how =='in_dir':
-            dir_path = default_path
-            # self.create_dir() # NEED FIX, when calling from the library, it will create dir under library folder
-        
-        file_path = os.path.join(dir_path, f"{file_name}.{type}")
-        if type == "parquet":
-            df.to_parquet(file_path)
-        elif type == "csv":
-            df.to_csv(file_path)#, header=True, index=False)
+        Parameters:
+        - method: The method for creating the directory. Options are 'data' or 'calendar'.
+        - parent_dir: The parent directory where the folder will be created. Defaults to the current directory.
+        - bucket_name: The S3 bucket name. Required if creating in S3.
+        - s3_directory: The directory in the S3 bucket where the folder should be created. Used only if is_s3 is True.
+        - aws_region: The AWS region where the S3 bucket is located (default: 'us-west-2').
+        - is_s3: If True, creates the directory in S3. If False, creates the directory locally.
+        """
+        if method == 'data':
+            dir_name = 'data'
+        elif method == 'calendar':
+            now = datetime.now()
+            dir_name = f"{now.year}/{str(now.month).zfill(2)}/{str(now.day).zfill(2)}"
         else:
-            raise ValueError(f"Unsupported file format: {type}")
-        
+            raise ValueError("Invalid method. Use 'data' or 'calendar'.")
+
+        if is_s3:
+            if not bucket_name:
+                raise ValueError("bucket_name is required when creating directories in S3.")
+            
+            s3_client = boto3.client('s3', region_name=aws_region)
+            s3_path = f"{s3_directory}/{dir_name}/" if s3_directory else f"{dir_name}/"
+
+            # Check if the directory already exists
+            result = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=s3_path, Delimiter='/')
+            if 'CommonPrefixes' in result:
+                print(f"Directory already exists at S3://{bucket_name}/{s3_path}")
+            else:
+                # Create an empty object with a trailing slash to signify a directory in S3
+                s3_client.put_object(Bucket=bucket_name, Key=s3_path)
+                print(f"Directory created at S3://{bucket_name}/{s3_path}")
+        else:
+            full_path = os.path.join(parent_dir, dir_name)
+            os.makedirs(full_path, exist_ok=True)
+            print(f"Directory created at {full_path}")
+    # create_dir(method='data', parent_dir='')
+    # create_dir(method='data', bucket_name='jtrade1-dir', s3_directory='data/dd', is_s3=True)
+    # create_dir(method='calendar', parent_dir='data/')
+    # create_dir(method='calendar', bucket_name='jtrade1-dir', s3_directory='data', is_s3=True)
+
+    def dir_locator(self, method: str = 'data', 
+                          parent_dir: str = '.', 
+                          bucket_name: str = None, 
+                          s3_directory: str = '', 
+                          aws_region: str = 'us-west-2', 
+                          is_s3: bool = False) -> str:
+        """
+        Locates the directory created by create_dir either locally or in S3.
+        """
+        if method == 'data':
+            dir_name = 'data'
+        elif method == 'calendar':
+            now = datetime.now()
+            dir_name = f"{now.year}/{str(now.month).zfill(2)}/{str(now.day).zfill(2)}"
+        else:
+            raise ValueError("Invalid method. Use 'data' or 'calendar'.")
+
+        if is_s3:
+            if not bucket_name:
+                raise ValueError("bucket_name is required when locating directories in S3.")
+            
+            s3_path = f"{s3_directory}/{dir_name}/" if s3_directory else f"{dir_name}/"
+            print(f"Directory located at S3://{bucket_name}/{s3_path}")
+            return s3_path
+        else:
+            full_path = os.path.join(parent_dir, dir_name)
+            print(f"Directory located at {full_path}")
+            return full_path
+    # DataHandler.directory_locator(method='data', parent_dir='')
+    # DataHandler.directory_locator(method='calendar', bucket_name='jtrade1-dir', s3_directory='', is_s3=True)
+
     def list_files(self, data_folder: str, 
                         from_s3: bool = False, 
                         aws_region: str = 'us-west-2'):
@@ -244,35 +279,98 @@ class DataMaster:
             dataframes[file] = df
             print(f"DataFrame loaded from {local_path}")
         return dataframes
-
     # df = load_s3('jtrade1-dir', 'data', 'hhh.csv', use_polars=False)# Single file loading
     # df_dict = load_s3('jtrade1-dir', 'data',use_polars=True, load_all=True) # Massive loading: all files in the directory
     # df_dict = load_s3('jtrade1-dir', 'data', use_polars=False,load_all=True, selected_files=['hhh.csv', 'eeeee.parquet'])
+    # load_local(data_folder='data', file_name = 'orders.csv',use_polars = True,load_all = True, selected_files = ['products.csv','users.csv'])
 
-    # load_local(data_folder='data', 
-    #                file_name = 'orders.csv', 
-    #                use_polars = True, 
-    #                load_all = True, 
-    #                selected_files = ['products.csv','users.csv'])
-            
-    def polars_load_dfs(self, data_folder, list_tables=None, load_all=True): #if list_tables have value, load_all has to be False
-        if load_all == True:
-            list_tables = self.list_files_in_directory(data_folder)
-        else:
-            list_tables = list_tables
+    def save_file(self, df, file_path, use_polars, delete_local=True):
+        """
+        Helper function to save a DataFrame to a local file, either as CSV or Parquet.
 
-        dataframes = {}
-        for table_name in list_tables:
-            csv_file = os.path.join(data_folder, f'{table_name}.csv')
-            parquet_file = os.path.join(data_folder, f'{table_name}.parquet')
-            if os.path.exists(csv_file):
-                dataframes[table_name] = pl.read_csv(csv_file)
-            elif os.path.exists(parquet_file):
-                dataframes[table_name] = pl.read_parquet(parquet_file)
+        Parameters:
+        - df: The DataFrame to save (can be Pandas or Polars).
+        - file_path: The local path to save the file.
+        - use_polars: Whether to save using Polars instead of Pandas.
+        - delete_local: Whether to delete the local file after saving (default: True).
+        """
+        if file_path.endswith('.csv'):
+            if use_polars:
+                df.write_csv(file_path)
             else:
-                raise FileNotFoundError(f"No data file found for table '{table_name}' in folder '{data_folder}'.")
-        return dataframes
+                df.to_csv(file_path, index=False)
+        elif file_path.endswith('.parquet'):
+            if use_polars:
+                df.write_parquet(file_path)
+            else:
+                df.to_parquet(file_path, index=False)
+        else:
+            raise ValueError("File extension not supported. Please use .csv or .parquet.")
+
+        if delete_local:
+            os.remove(file_path)
+            print(f"Local file {file_path} has been deleted.")
+        else:
+            print(f"Local file {file_path} has been kept.")
     
+    def save_s3(self, df, 
+                bucket_name: str, 
+                s3_directory: str, 
+                file_name: str, 
+                aws_region: str = 'us-west-2', 
+                use_polars: bool = False, 
+                delete_local: bool = True):
+        """
+        Saves a DataFrame to an S3 directory as a CSV or Parquet file.
+
+        Parameters:
+        - df: The DataFrame to save (can be Pandas or Polars).
+        - bucket_name: The S3 bucket name.
+        - s3_directory: The directory in the S3 bucket where the file should be saved.
+        - file_name: The name of the file to save in the S3 bucket (e.g., 'myfile.csv' or 'myfile.parquet').
+        - aws_region: The AWS region where the bucket is located (default: 'us-east-1').
+        - use_polars: Whether to use Polars instead of Pandas.
+        - delete_local: Whether to delete the local file after upload (default: True).
+        """
+        s3_client = boto3.client('s3', region_name=aws_region)
+        file_path = file_name
+        # Save locally first
+        self.save_file(df, file_path, use_polars, delete_local=False)
+        # Upload the local file to S3
+        s3_path = f"{s3_directory}/{file_name}" if s3_directory else file_name
+        with open(file_path, 'rb') as data:
+            s3_client.put_object(Bucket=bucket_name, Key=s3_path, Body=data)
+        print(f"DataFrame saved to S3://{bucket_name}/{s3_path}")
+
+        # Delete local file if required
+        if delete_local:
+            os.remove(file_path)
+            print(f"Local file {file_path} has been deleted.")
+        else:
+            print(f"Local file {file_path} has been kept.")
+    
+    def save_local(self, df, 
+                data_folder: str, 
+                file_name: str, 
+                use_polars: bool = False, 
+                delete_local: bool = False):
+        """
+        Saves a DataFrame to a local directory as a CSV or Parquet file.
+
+        Parameters:
+        - df: The DataFrame to save (can be Pandas or Polars).
+        - data_folder: The local directory where the file should be saved.
+        - file_name: The name of the file to save (e.g., 'myfile.csv' or 'myfile.parquet').
+        - use_polars: Whether to use Polars instead of Pandas.
+        - delete_local: Whether to delete the local file after saving (default: False).
+        """
+        file_path = os.path.join(data_folder, file_name)
+        self.save_file(df, file_path, use_polars, delete_local)
+        print(f"DataFrame saved to {file_path}")
+    # df = pd.DataFrame({'date': [1, 2], 'value': [3, 4]})
+    # save_s3(df, 'jtrade1-dir', 'data', 'testtest.parquet',use_polars=False, delete_local=True)
+    # save_local(df, 'data','aaaaaa.csv', delete_local=False)
+
     # polars tables are stored in dictionary
     def polars_run_query(tables: dict, 
                          query: str) -> pl.DataFrame:
@@ -294,47 +392,6 @@ class DataMaster:
         # Execute the query and collect the result into a DataFrame
         result = pl_sql_context.execute(query).collect()
         return result
-
-    def to_s3(self, df: pd.DataFrame, 
-                    bucket_name: str, 
-                    s3_directory: str, 
-                    file_name: str, 
-                    aws_region: str = 'us-east-1', 
-                    delete_local: bool = True):
-        """
-        Saves a pandas DataFrame to an S3 directory as a CSV or Parquet file based on the file extension.
-        Parameters:
-        - df: pandas DataFrame to save
-        - bucket_name: The S3 bucket name
-        - s3_directory: The directory in the S3 bucket where the file should be saved
-        - file_name: The name of the file to save in the S3 bucket (e.g., 'myfile.csv' or 'myfile.parquet')
-        - aws_region: The AWS region where the bucket is located (default: 'us-east-1')
-        - delete_local: Whether to delete the local file after upload (default: False)
-        """
-        # Determine the file path
-        file_path = f"{s3_directory}/{file_name}" if s3_directory else file_name
-        # Save the DataFrame locally based on the file extension
-        if file_name.endswith('.csv'):
-            df.to_csv(file_name, index=False)
-        elif file_name.endswith('.parquet'):
-            df.to_parquet(file_name, index=False)
-        else:
-            raise ValueError("File extension not supported. Please use .csv or .parquet.")
-        
-        s3_client = boto3.client('s3', region_name=aws_region)        # Initialize S3 client
-        # Upload the local file to S3
-        with open(file_name, 'rb') as data:
-            s3_client.put_object(Bucket=bucket_name, Key=file_path, Body=data)
-        print(f"DataFrame saved to S3://{bucket_name}/{file_path}")
-        if delete_local:   # Delete the local file if required
-            os.remove(file_name)
-            print(f"Local file {file_name} has been deleted.")
-        else:
-            print(f"Local file {file_name} has been kept.")
-    # # Example usage:
-    # df = pd.DataFrame({'col1': [1, 2], 'col2': [3, 4]})
-    # to_s3(df, 'jtrade1-dir', 'data', 'wwww.csv', delete_local=True)
-    # to_s3(df, 'jtrade1-dir', 'data', 'eeeee.parquet', delete_local=True)
 
 class Embedding: #STILL WORKING IN PROGRESS
     def __init__(self, aws_bedrock, config_file):
@@ -362,22 +419,104 @@ class Embedding: #STILL WORKING IN PROGRESS
         embedding_array = self.aws_bedrock.generate_embedding(text_input)
         pass
 
-# Example usage:
 if __name__ == "__main__":
-    aws_session = boto3.Session()
-    data_master = DataMaster(aws_session=aws_session)
+    # Initialize the DataMaster class
+    dm = DataMaster()
 
-    # Save data locally
-    df_example = pd.DataFrame({'A': [1, 2], 'B': [3, 4]})
-    data_master.save_data({'example': df_example}, file_format='csv')
+    # Test Redshift connection and SQL execution
+    try:
+        redshift = Redshift()
+        df = redshift.run_sql("SELECT * FROM some_table LIMIT 5;")
+        print("Redshift SQL Execution Successful:")
+        print(df)
+    except Exception as e:
+        print(f"Redshift SQL Execution Failed: {e}")
 
-    # Load data locally
-    df_loaded = data_master.load_from_local('data/2024/07/25/example.csv', 'csv')
-    print(df_loaded)
+    # Test run_sql_cache
+    try:
+        csv_path = "test.csv"
+        query = "SELECT * FROM some_table LIMIT 5;"
+        dm.run_sql_cache(csv_path, query, refresh=True)
+        print("run_sql_cache execution successful.")
+    except Exception as e:
+        print(f"run_sql_cache execution failed: {e}")
 
-    # Save data to S3
-    data_master.to_s3('your-bucket-name', 'example.csv', df_example.to_csv(index=False))
+    # Test get_current_dir
+    current_dir = dm.get_current_dir()
+    print(f"Current directory: {current_dir}")
 
-    # Load data from S3
-    df_loaded_s3 = data_master.load_from_s3('your-bucket-name', 'example.csv', 'csv')
-    print(df_loaded_s3)
+    # Test create_dir (local and S3)
+    try:
+        dm.create_dir(method='data', parent_dir='.')
+        dm.create_dir(method='calendar', parent_dir='.')
+        dm.create_dir(method='data', bucket_name='your-s3-bucket', s3_directory='your/s3/folder', is_s3=True)
+        dm.create_dir(method='calendar', bucket_name='your-s3-bucket', s3_directory='your/s3/folder', is_s3=True)
+        print("create_dir execution successful.")
+    except Exception as e:
+        print(f"create_dir execution failed: {e}")
+
+    # Test dir_locator (local and S3)
+    try:
+        local_path = dm.dir_locator(method='data', parent_dir='.')
+        s3_path = dm.dir_locator(method='calendar', bucket_name='your-s3-bucket', s3_directory='your/s3/folder', is_s3=True)
+        print(f"Local directory located at: {local_path}")
+        print(f"S3 directory located at: S3://{s3_path}")
+    except Exception as e:
+        print(f"dir_locator execution failed: {e}")
+
+    # Test list_files (local and S3)
+    try:
+        local_files = dm.list_files('your/local/directory', from_s3=False)
+        s3_files = dm.list_files('your-s3-bucket/your/s3/folder', from_s3=True)
+        print(f"Local files: {local_files}")
+        print(f"S3 files: {s3_files}")
+    except Exception as e:
+        print(f"list_files execution failed: {e}")
+
+    # Test load_file (local and S3)
+    try:
+        df_local = dm.load_local('your/local/directory', 'yourfile.csv', use_polars=False)
+        df_s3 = dm.load_s3('your-s3-bucket', 'your/s3/folder', 'yourfile.csv', use_polars=False)
+        print("load_file execution successful.")
+        print(f"Local file loaded: {df_local.head()}")
+        print(f"S3 file loaded: {df_s3.head()}")
+    except Exception as e:
+        print(f"load_file execution failed: {e}")
+
+    # Test save_file (local and S3)
+    try:
+        df = pd.DataFrame({'col1': [1, 2], 'col2': [3, 4]})
+        dm.save_local(df, 'your/local/directory', 'test_save_local.csv', use_polars=False)
+        dm.save_s3(df, 'your-s3-bucket', 'your/s3/folder', 'test_save_s3.csv', use_polars=False)
+        print("save_file execution successful.")
+    except Exception as e:
+        print(f"save_file execution failed: {e}")
+
+    # Test polars_run_query
+    try:
+        tables = {
+            'table1.csv': pl.DataFrame({'col1': [1, 2], 'col2': [3, 4]}),
+            'table2.csv': pl.DataFrame({'col1': [1, 2], 'col2': [3, 4]})
+        }
+        query = "SELECT * FROM table1 WHERE col1 = 1"
+        result_df = dm.polars_run_query(tables, query)
+        print(f"Polars SQL Query Result: {result_df}")
+    except Exception as e:
+        print(f"polars_run_query execution failed: {e}")
+
+# DataMaster
+# Provides utility functions for managing data files locally and on S3, and performing SQL queries using Polars.
+
+# Methods:
+# run_sql_cache(csv_path, query, refresh=False): Caches the result of a SQL query as a CSV file.
+# get_current_dir(): Returns the directory of the running script.
+# create_dir(method='data', parent_dir='.', bucket_name=None, s3_directory='', aws_region='us-west-2', is_s3=False): Creates a directory either locally or in S3.
+# dir_locator(method='data', parent_dir='.', bucket_name=None, s3_directory='', aws_region='us-west-2', is_s3=False): Locates a directory created by create_dir.
+# list_files(data_folder, from_s3=False, aws_region='us-west-2'): Lists all CSV and Parquet files in a local or S3 directory.
+# load_file(path, use_polars, is_s3=False, s3_client=None): Helper function to load a single file, either locally or from S3.
+# load_s3(bucket_name, s3_directory='', file_name='', aws_region='us-west-2', use_polars=False, load_all=False, selected_files=None): Loads files from S3 into DataFrames.
+# load_local(data_folder, file_name='', use_polars=False, load_all=False, selected_files=None): Loads files from a local directory into DataFrames.
+# save_file(df, file_path, use_polars, delete_local=True): Helper function to save a DataFrame to a local file.
+# save_s3(df, bucket_name, s3_directory, file_name, aws_region='us-west-2', use_polars=False, delete_local=True): Saves a DataFrame to S3.
+# save_local(df, data_folder, file_name, use_polars=False, delete_local=False): Saves a DataFrame to a local directory.
+# polars_run_query(tables, query): Runs a SQL query on Polars DataFrames.
