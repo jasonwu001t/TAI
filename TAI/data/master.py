@@ -3,6 +3,7 @@ from TAI.utils import ConfigLoader
 
 import json, os, sys, inspect, logging
 from datetime import datetime
+from io import StringIO, BytesIO
 
 import pandas as pd
 import polars as pl
@@ -117,25 +118,155 @@ class DataMaster:
             df.to_csv(file_path)#, header=True, index=False)
         else:
             raise ValueError(f"Unsupported file format: {type}")
+        
+    def list_files(self, data_folder: str, 
+                                from_s3: bool = False, 
+                                aws_region: str = 'us-west-2'):
+        """
+        Lists all CSV and Parquet file names from a local directory or a selected S3 folder.
 
-    def set_s3_client(aws_session=None):
-        return aws_session.client('s3') if aws_session else None
-    
-    def list_files_in_directory(data_folder):
-        # Initialize an empty list to store the filenames
-        # # Example usage
-        # directory_path = '/path/to/your/directory'  # Replace with your directory path
-        # file_list = list_files_in_directory(directory_path)
-        # print(file_list)
+        Parameters:
+        - data_folder: Path to the local directory or 'bucket_name/s3_directory' if from_s3 is True.
+        - from_s3: If True, list files from S3. If False, list files from the local directory.
+        - aws_region: The AWS region where the S3 bucket is located (default: 'us-east-1').
 
+        Returns:
+        - A list of file names from the specified data source (local directory or S3).
+        """
         file_list = []
-        for root, dirs, files in os.walk(data_folder):  # Walk through the directory
-            for file in files:   # Check if the file ends with .csv or .parquet
-                if file.endswith('.csv') or file.endswith('.parquet'):
-                    file_list.append(file)   # Append the filename to the list
-        return file_list
 
-    def polars_load_dfs(self, data_folder,list_tables=None, load_all=True): #if list_tables have value, load_all has to be False
+        if from_s3:
+            # Parse the bucket name and S3 directory from data_folder
+            bucket_name, s3_directory = data_folder.split('/', 1)
+            
+            # Initialize S3 client
+            s3_client = boto3.client('s3', region_name=aws_region)
+            list_objects = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=s3_directory)
+            
+            if 'Contents' in list_objects:
+                for obj in list_objects['Contents']:
+                    s3_file = obj['Key']
+                    if s3_file.endswith('.csv') or s3_file.endswith('.parquet'):
+                        file_list.append(os.path.basename(s3_file))  # Append only the file name to the list
+        else:
+            # List files from the local directory
+            for root, dirs, files in os.walk(data_folder):
+                for file in files:
+                    if file.endswith('.csv') or file.endswith('.parquet'):
+                        file_list.append(file)  # Append only the file name to the list
+
+        return file_list
+    # ls = list_files('jtrade1-dir/data/dd', from_s3=True)
+    # print(ls)
+
+    def load_file(self, path, use_polars, is_s3=False, s3_client=None):
+        """
+        Helper function to load a single file, either from a local path or from S3.
+
+        Parameters:
+        - path: The local path or S3 key to the file.
+        - use_polars: Whether to use Polars instead of Pandas.
+        - is_s3: If True, load the file from S3.
+        - s3_client: The Boto3 S3 client, required if is_s3 is True.
+
+        Returns:
+        - A DataFrame (Polars or Pandas) loaded from the file.
+        """
+        if is_s3 and s3_client:
+            response = s3_client.get_object(Bucket=path[0], Key=path[1])
+            if path[1].endswith('.csv'):
+                data = response['Body'].read().decode('utf-8')
+                if use_polars:
+                    return pl.read_csv(BytesIO(data.encode()))
+                else:
+                    return pd.read_csv(StringIO(data))
+            elif path[1].endswith('.parquet'):
+                data = response['Body'].read()
+                if use_polars:
+                    return pl.read_parquet(BytesIO(data))
+                else:
+                    return pd.read_parquet(BytesIO(data))
+        else:
+            if path.endswith('.csv'):
+                return pl.read_csv(path) if use_polars else pd.read_csv(path)
+            elif path.endswith('.parquet'):
+                return pl.read_parquet(path) if use_polars else pd.read_parquet(path)
+        raise ValueError("File extension not supported. Please use .csv or .parquet.")
+
+    def load_s3(self, bucket_name: str, 
+                s3_directory: str = '',
+                file_name: str = '', 
+                aws_region: str = 'us-west-2', 
+                use_polars: bool = False, 
+                load_all: bool = False, 
+                selected_files: list = None):
+        """
+        Loads files from an S3 directory into Pandas or Polars DataFrames. Supports CSV and Parquet formats.
+        """
+        s3_client = boto3.client('s3', region_name=aws_region)
+        
+        if not load_all:
+            s3_path = f"{s3_directory}/{file_name}" if s3_directory else file_name
+            df = self.load_file((bucket_name, s3_path), use_polars, is_s3=True, s3_client=s3_client)
+            print(f"DataFrame loaded from S3://{bucket_name}/{s3_path}")
+            return df
+        
+        list_objects = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=s3_directory)
+        all_files = [obj['Key'] for obj in list_objects.get('Contents', []) if obj['Key'].endswith(('.csv', '.parquet'))]
+        
+        if selected_files:
+            files_to_load = [file for file in all_files if any(file.endswith(selected_file) for selected_file in selected_files)]
+        else:
+            files_to_load = all_files
+
+        dataframes = {}
+        for s3_path in files_to_load:
+            df = self.load_file((bucket_name, s3_path), use_polars, is_s3=True, s3_client=s3_client)
+            file_key = os.path.basename(s3_path)
+            dataframes[file_key] = df
+            print(f"DataFrame loaded from S3://{bucket_name}/{s3_path}")
+        return dataframes
+
+    def load_local(self, data_folder: str, 
+                file_name: str = '', 
+                use_polars: bool = False, 
+                load_all: bool = False, 
+                selected_files: list = None):
+        """
+        Loads files from a local directory into Pandas or Polars DataFrames. Supports CSV and Parquet formats.
+        """
+        if not load_all:
+            local_path = os.path.join(data_folder, file_name)
+            df = self.load_file(local_path, use_polars)
+            print(f"DataFrame loaded from {local_path}")
+            return df
+
+        all_files = [f for f in os.listdir(data_folder) if f.endswith(('.csv', '.parquet'))]
+
+        if selected_files:
+            files_to_load = [file for file in all_files if file in selected_files]
+        else:
+            files_to_load = all_files
+
+        dataframes = {}
+        for file in files_to_load:
+            local_path = os.path.join(data_folder, file)
+            df = self.load_file(local_path, use_polars)
+            dataframes[file] = df
+            print(f"DataFrame loaded from {local_path}")
+        return dataframes
+
+    # df = load_s3('jtrade1-dir', 'data', 'hhh.csv', use_polars=False)# Single file loading
+    # df_dict = load_s3('jtrade1-dir', 'data',use_polars=True, load_all=True) # Massive loading: all files in the directory
+    # df_dict = load_s3('jtrade1-dir', 'data', use_polars=False,load_all=True, selected_files=['hhh.csv', 'eeeee.parquet'])
+
+    # load_local(data_folder='data', 
+    #                file_name = 'orders.csv', 
+    #                use_polars = True, 
+    #                load_all = True, 
+    #                selected_files = ['products.csv','users.csv'])
+            
+    def polars_load_dfs(self, data_folder, list_tables=None, load_all=True): #if list_tables have value, load_all has to be False
         if load_all == True:
             list_tables = self.list_files_in_directory(data_folder)
         else:
@@ -153,44 +284,68 @@ class DataMaster:
                 raise FileNotFoundError(f"No data file found for table '{table_name}' in folder '{data_folder}'.")
         return dataframes
     
-    def polars_run_query(self, polars_dfs, sql_query):
-        # example : porlars_run_query(dfs, """SELECT * FROM table1""")
-        context = pl.SQLContext(self.polars_dfs)
-        try:
-            result = context.execute(sql_query).collect()
-            return result
-        except Exception as e:
-            raise f"Query execution error: {e}"
+    # polars tables are stored in dictionary
+    def polars_run_query(tables: dict, 
+                         query: str) -> pl.DataFrame:
+        """
+        Runs a SQL query on the provided tables using Polars.
 
-    def load_from_local(self, file_name, file_format, base_path='in_dir'):
-        if base_path =='in_dir':
-            dir_path = os.path.join(self.get_current_dir(), 'data')
+        Parameters:
+        - tables: A dictionary of Polars DataFrames with table names as keys.
+        - query: A SQL query string to be executed.
 
-        full_path = os.path.join(dir_path, file_name)
+        Returns:
+        - A Polars DataFrame containing the result of the query.
+        """
+        pl_sql_context = pl.SQLContext()  # Register each table in Polars SQL context
+        
+        for table_name, df in tables.items(): # Remove file extensions from table names for simpler queries
+            table_name_no_ext = os.path.splitext(table_name)[0]
+            pl_sql_context.register(table_name_no_ext, df)
+        # Execute the query and collect the result into a DataFrame
+        result = pl_sql_context.execute(query).collect()
+        return result
 
-        if file_format == 'csv':
-            return pd.read_csv(full_path)
-        elif file_format == 'parquet':
-            return pd.read_parquet(full_path)
-
-    def save_to_s3(self, bucket_name, object_name, data, aws_session=None):
-        s3_client = self.set_s3_client(aws_session)
-        try:
-            s3_client.put_object(Bucket=bucket_name, Key=object_name, Body=data)
-            logging.info(f"File {object_name} uploaded to {bucket_name}")
-        except NoCredentialsError:
-            logging.error("Credentials not available")
-
-    def load_from_s3(self, bucket_name, file_key, file_format, aws_session=None):
-        s3_client = self.set_s3_client(aws_session)
-        try:
-            obj = s3_client.get_object(Bucket=bucket_name, Key=file_key)
-            if file_format == 'csv':
-                return pd.read_csv(obj['Body'])
-            elif file_format == 'parquet':
-                return pd.read_parquet(obj['Body'])
-        except Exception as e:
-            logging.error(f"Error loading from S3: {e}")
+    def to_s3(self, df: pd.DataFrame, 
+                    bucket_name: str, 
+                    s3_directory: str, 
+                    file_name: str, 
+                    aws_region: str = 'us-east-1', 
+                    delete_local: bool = True):
+        """
+        Saves a pandas DataFrame to an S3 directory as a CSV or Parquet file based on the file extension.
+        Parameters:
+        - df: pandas DataFrame to save
+        - bucket_name: The S3 bucket name
+        - s3_directory: The directory in the S3 bucket where the file should be saved
+        - file_name: The name of the file to save in the S3 bucket (e.g., 'myfile.csv' or 'myfile.parquet')
+        - aws_region: The AWS region where the bucket is located (default: 'us-east-1')
+        - delete_local: Whether to delete the local file after upload (default: False)
+        """
+        # Determine the file path
+        file_path = f"{s3_directory}/{file_name}" if s3_directory else file_name
+        # Save the DataFrame locally based on the file extension
+        if file_name.endswith('.csv'):
+            df.to_csv(file_name, index=False)
+        elif file_name.endswith('.parquet'):
+            df.to_parquet(file_name, index=False)
+        else:
+            raise ValueError("File extension not supported. Please use .csv or .parquet.")
+        
+        s3_client = boto3.client('s3', region_name=aws_region)        # Initialize S3 client
+        # Upload the local file to S3
+        with open(file_name, 'rb') as data:
+            s3_client.put_object(Bucket=bucket_name, Key=file_path, Body=data)
+        print(f"DataFrame saved to S3://{bucket_name}/{file_path}")
+        if delete_local:   # Delete the local file if required
+            os.remove(file_name)
+            print(f"Local file {file_name} has been deleted.")
+        else:
+            print(f"Local file {file_name} has been kept.")
+    # # Example usage:
+    # df = pd.DataFrame({'col1': [1, 2], 'col2': [3, 4]})
+    # to_s3(df, 'jtrade1-dir', 'data', 'wwww.csv', delete_local=True)
+    # to_s3(df, 'jtrade1-dir', 'data', 'eeeee.parquet', delete_local=True)
 
 class Embedding: #STILL WORKING IN PROGRESS
     def __init__(self, aws_bedrock, config_file):
@@ -232,7 +387,7 @@ if __name__ == "__main__":
     print(df_loaded)
 
     # Save data to S3
-    data_master.save_to_s3('your-bucket-name', 'example.csv', df_example.to_csv(index=False))
+    data_master.to_s3('your-bucket-name', 'example.csv', df_example.to_csv(index=False))
 
     # Load data from S3
     df_loaded_s3 = data_master.load_from_s3('your-bucket-name', 'example.csv', 'csv')
