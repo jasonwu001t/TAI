@@ -7,9 +7,9 @@ with open('requirements.txt') as f:
 setup(
     name="TAI",
     version="0.2.0",
-    author="Your Name",
+    author="Jason",
     author_email="your.email@example.com",
-    description="A unified library for data analytics, broker APIs, and GenAI",
+    description="A unified library for data analytics",
     # long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
     url="https://github.com/yourusername/TAI",

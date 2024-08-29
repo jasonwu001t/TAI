@@ -2,8 +2,6 @@ import streamlit as st
 import uuid
 from TAI.genai.genai import AWSBedrock  # Adjusted import to match the new backend structure
 
-# https://github.com/acwwat/amazon-bedrock-agent-test-ui
-
 client = 'function_handler' # agent, conversation,  function_handler
 agent_id = ''
 agent_alias_id = ''
