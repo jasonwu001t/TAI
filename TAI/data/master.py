@@ -6,6 +6,7 @@ from datetime import datetime
 from io import StringIO, BytesIO
 
 import pandas as pd
+import numpy as np
 import polars as pl
 import psycopg2
 
@@ -321,9 +322,18 @@ class DataMaster:
         - delete_local: Whether to delete the local file after saving (default: True).
         """
         if isinstance(data, dict):
-            # Saving as JSON if the data is a dictionary
+            # Convert int64 to int for JSON serialization
+            def convert_np_types(obj):
+                if isinstance(obj, np.integer):
+                    return int(obj)
+                elif isinstance(obj, np.floating):
+                    return float(obj)
+                elif isinstance(obj, np.ndarray):
+                    return obj.tolist()
+                raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+
             with open(file_path, 'w') as json_file:
-                json.dump(data, json_file)
+                json.dump(data, json_file, default=convert_np_types)
             print(f"Dictionary saved as JSON to {file_path}")
         else:
             if file_path.endswith('.csv'):
