@@ -311,7 +311,7 @@ class DataMaster:
     # df_dict = load_s3('jtrade1-dir', 'data', use_polars=False,load_all=True, selected_files=['hhh.csv', 'eeeee.parquet'])
     # load_local(data_folder='data', file_name = 'orders.csv',use_polars = True,load_all = True, selected_files = ['products.csv','users.csv'])
 
-    def save_file(self, data, file_path, use_polars=False, delete_local=True):
+    def save_file(self, data, file_path, use_polars=False, delete_local=False):
         """
         Helper function to save a DataFrame or dictionary to a local file, either as CSV, Parquet, or JSON.
 
