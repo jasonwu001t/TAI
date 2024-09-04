@@ -127,23 +127,27 @@ class QuickPlot:
         return fig
 
     def prepare_figure(self, df, title):
-        # Ensure 'date' is the index and convert to datetime
-        df['date'] = pd.to_datetime(df['date'])
-        df.set_index('date', inplace=True)
+        # Get the first and second column names dynamically
+        first_col = df.columns[0]
+        second_col = df.columns[1]
 
-        # Calculate latest rate and YoY changes
-        latest_rate = df['value'].iloc[-1]
-        yoy_change = df['value'].pct_change(12).iloc[-1]  # change from one year ago
+        # Ensure first column (assumed to be 'date') is the index and convert to datetime
+        df[first_col] = pd.to_datetime(df[first_col])
+        df.set_index(first_col, inplace=True)
+
+        # Calculate latest rate and YoY changes using the second column
+        latest_rate = df[second_col].iloc[-1]
+        yoy_change = df[second_col].pct_change(12).iloc[-1]  # change from one year ago
         section_1 = f"Latest Refresh On: {df.index[-1].strftime('%a %b %d, %Y')}<br><b>{title}:</b> {latest_rate:,.2f} \
                 <br><b>YoY Change:</b> {yoy_change:,.2f} bps"
 
-        # Calculate Mean, Median, Min, and Max
-        mean_val = df['value'].mean()
-        median_val = df['value'].median()
-        min_val = df['value'].min()
-        min_date = df['value'].idxmin().strftime('%b %Y')
-        max_val = df['value'].max()
-        max_date = df['value'].idxmax().strftime('%b %Y')
+        # Calculate Mean, Median, Min, and Max using the second column
+        mean_val = df[second_col].mean()
+        median_val = df[second_col].median()
+        min_val = df[second_col].min()
+        min_date = df[second_col].idxmin().strftime('%b %Y')
+        max_val = df[second_col].max()
+        max_date = df[second_col].idxmax().strftime('%b %Y')
         section_2 = f"<b>Mean:</b> {mean_val:,.2f}<br>" \
                     f"<b>Median:</b> {median_val:,.2f}<br><b>Min:</b> {min_val:,.2f} ({min_date})<br>" \
                     f"<b>Max:</b> {max_val:,.2f} ({max_date})"
@@ -153,24 +157,24 @@ class QuickPlot:
         # Add a line plot with a customized hover text and line style
         fig.add_trace(go.Scatter(
             x=df.index,
-            y=df['value'],
+            y=df[second_col],
             mode='lines',
             name=title,  # This is the right panel line name, for this case I do not want to show
             line=dict(color='darkblue', width=2),
-            hovertemplate='Date: %{x}<br>Value: %{y:,.2f}'
+            hovertemplate=f'Date: %{x}<br>{title}: %{y:,.2f}'
         ))
 
         # Add low and high points for each year
         for year in df.index.year.unique():
             df_year = df[df.index.year == year]
             if not df_year.empty:
-                min_idx = df_year['value'].idxmin()
-                max_idx = df_year['value'].idxmax()
+                min_idx = df_year[second_col].idxmin()
+                max_idx = df_year[second_col].idxmax()
 
                 # Low point use Red dot
                 fig.add_trace(go.Scatter(
                     x=[min_idx],
-                    y=[df_year['value'][min_idx]],
+                    y=[df_year[second_col][min_idx]],
                     mode='markers',
                     name='Calendar Year Low' if year == df.index.year.unique()[-1] else None,  # Only label the last year
                     marker=dict(color='red'),
@@ -178,7 +182,7 @@ class QuickPlot:
                 ))
                 fig.add_annotation(
                     x=min_idx,
-                    y=df_year['value'][min_idx],
+                    y=df_year[second_col][min_idx],
                     text=f'{year} Low',
                     showarrow=True,
                     font=dict(color="black", size=12),
@@ -196,10 +200,10 @@ class QuickPlot:
                     opacity=0.8
                 )
 
-                # High point use Green Dot
+                # High point use Green dot
                 fig.add_trace(go.Scatter(
                     x=[max_idx],
-                    y=[df_year['value'][max_idx]],
+                    y=[df_year[second_col][max_idx]],
                     mode='markers',
                     name='Calendar Year High' if year == df.index.year.unique()[-1] else None,  # Only label the last year
                     marker=dict(color='green'),
@@ -207,7 +211,7 @@ class QuickPlot:
                 ))
                 fig.add_annotation(
                     x=max_idx,
-                    y=df_year['value'][max_idx],
+                    y=df_year[second_col][max_idx],
                     text=f'{year} High',
                     showarrow=True,
                     font=dict(color="black", size=12),
@@ -227,7 +231,7 @@ class QuickPlot:
 
         fig.update_layout(
             xaxis_title="Date",
-            yaxis_title="Value",
+            yaxis_title=title,
             plot_bgcolor='rgba(0, 0, 0, 0)',  # Transparent background
             xaxis=dict(
                 showgrid=True,  # Show a grid
@@ -258,6 +262,7 @@ class QuickPlot:
             ]
         )
         return fig
+
 
 if __name__ == "__main__":
     # Sample data for demonstration
