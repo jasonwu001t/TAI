@@ -12,8 +12,8 @@ class AWSBedrock:
     def __init__(self, 
                  region_name='us-west-2', 
                  endpoint_url='https://bedrock.us-west-2.amazonaws.com',
-                 model_id='anthropic.claude-instant-v1',
-                 embedding_model_id='amazon.titan-embed-text-v1', #'amazon.titan-embed-text-v1', 'amazon.titan-embed-g1-text-02
+                 model_id='anthropic.claude-instant-v1', # 'anthropic.claude-3-5-sonnet-20240620-v1:0'
+                 embedding_model_id='amazon.titan-embed-text-v1', #'amazon.titan-embed-text-v1', 'amazon.titan-embed-g1-text-02', 'amazon.titan-embed-text-v2:0'
                  model_kwargs=None, 
                  max_tokens=512):
         
@@ -106,7 +106,7 @@ class AWSBedrock:
         for model in self.available_models:
             if model.get('modelLifecycle')['status'] == 'ACTIVE':
                 active_models[model.get('modelId')] = model
-        return active_models
+        return active_models.keys()
 
     # Retrieve information about a specific model
     def get_model_info(self, model_id):
@@ -141,7 +141,15 @@ class AWSBedrock:
         self.conversation_history.append(("ai", response_content['response']))
 
         return response_content
-
+    
+    # for immediate prompt, this does not cache chat history, good to use as function handler
+    def direct_response(self, prompt, **kwargs):
+        messages = [
+            ("system", "You are an honest and helpful bot. You reply to the question in a concise and direct way."),
+            ("human", prompt)
+        ]
+        return self._generate_response(messages, **kwargs)
+    
     # Embedding generation using Amazon Titan Embedding model
     def generate_embedding(self, input_data):
         """
