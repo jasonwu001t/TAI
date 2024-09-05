@@ -211,7 +211,7 @@ class Alpaca:
         request_params = StockBarsRequest(
             symbol_or_symbols=symbol_or_symbols,
             timeframe=TimeFrame.Day, #TimeFrame(timeframe), .Min, Hour, Day, Week, Month
-            start = self.now - timedelta(days = 5),
+            start = self.now - timedelta(days = 365),
             limit=limit
         )
         res =  self.stock_md_client.get_stock_bars(request_params)
