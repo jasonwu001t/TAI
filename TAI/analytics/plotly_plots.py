@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 import calendar
 import copy
-from data_analytics import DataAnalytics
+from TAI.analytics import DataAnalytics
 
 class QuickPlot:
     def __init__(self):
