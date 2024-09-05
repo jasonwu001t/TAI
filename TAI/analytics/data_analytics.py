@@ -373,6 +373,140 @@ class DataAnalytics:
         describe['input_value'] = input_value
         describe['forecast_value'] = input_value * (1 + describe.iloc[:, 1] / 100).round(3)
         return describe
+    
+##################### Below are used for Quantstats
+    def avg_loss(self, returns):
+        return returns[returns < 0].mean()
+
+    def avg_return(self, returns):
+        return returns.mean()
+
+    def avg_win(self, returns):
+        return returns[returns > 0].mean()
+
+    def best(self, returns):
+        return returns.max()
+
+    def cagr(self, returns, periods=252):
+        n = len(returns) / periods
+        return (np.prod(returns + 1)) ** (1 / n) - 1
+
+    def calmar(self, returns, drawdown):
+        return self.cagr(returns) / self.max_drawdown(drawdown)
+
+    def common_sense_ratio(self, returns, drawdown):
+        return self.avg_return(returns) / self.max_drawdown(drawdown)
+
+    def comp(self, returns):
+        """Compounds returns."""
+        return np.prod(returns + 1) - 1
+
+    def conditional_value_at_risk(self, returns, level=0.05):
+        return returns[returns <= returns.quantile(level)].mean()
+
+    def consecutive_losses(self, returns):
+        return (returns < 0).astype(int).groupby((returns >= 0).astype(int).cumsum()).cumsum().max()
+
+    def consecutive_wins(self, returns):
+        return (returns > 0).astype(int).groupby((returns <= 0).astype(int).cumsum()).cumsum().max()
+
+    def drawdown_details(self, returns):
+        """Calculates detailed drawdown periods."""
+        cumulative_returns = returns.cumsum()
+        drawdowns = cumulative_returns - cumulative_returns.cummax()
+
+        is_in_drawdown = drawdowns < 0
+        drawdown_periods = []
+
+        start = None
+        for i in range(1, len(drawdowns)):
+            if is_in_drawdown[i] and not is_in_drawdown[i - 1]:
+                start = drawdowns.index[i]
+            if not is_in_drawdown[i] and is_in_drawdown[i - 1] and start is not None:
+                end = drawdowns.index[i]
+                dd = drawdowns[start:end].min()
+                drawdown_periods.append({'start': start, 'end': end, 'drawdown': dd})
+                start = None
+
+        if start is not None:  # For ongoing drawdowns
+            drawdown_periods.append({'start': start, 'end': drawdowns.index[-1], 'drawdown': drawdowns[start:].min()})
+
+        return pd.DataFrame(drawdown_periods)
+
+    def expected_return(self, returns, risk_free=0):
+        return returns.mean() - risk_free
+
+    def expected_shortfall(self, returns):
+        return self.conditional_value_at_risk(returns)
+
+    def gain_to_pain_ratio(self, returns):
+        return np.sum(returns) / np.abs(np.sum(returns[returns < 0]))
+
+    def geometric_mean(self, returns):
+        return np.prod(returns + 1) ** (1 / len(returns)) - 1
+
+    def max_drawdown(self, drawdown):
+        return drawdown.min()
+
+    def monthly_returns(self, returns):
+        return returns.resample('M').sum()
+
+    def sharpe(self, returns, risk_free=0, periods=252):
+        return (returns.mean() - risk_free) / returns.std() * np.sqrt(periods)
+
+    def sortino(self, returns, risk_free=0, periods=252):
+        downside_risk = returns[returns < risk_free].std() * np.sqrt(periods)
+        return (returns.mean() - risk_free) / downside_risk
+    
+    def payoff_ratio(self, returns):
+        """
+        Payoff ratio is the ratio of average profit to average loss.
+        It indicates the size of winning trades relative to losing trades.
+        """
+        avg_win = self.avg_win(returns)
+        avg_loss = np.abs(self.avg_loss(returns))
+        if avg_loss == 0:
+            return np.inf  # Avoid division by zero
+        return avg_win / avg_loss
+
+    def tail_ratio(self, returns):
+        """
+        Tail ratio compares the magnitude of the largest gain to the largest loss.
+        """
+        tail_gain = np.percentile(returns, 95)
+        tail_loss = np.abs(np.percentile(returns, 5))
+        if tail_loss == 0:
+            return np.inf  # Avoid division by zero
+        return tail_gain / tail_loss
+
+    def risk_of_ruin(self, returns, capital=1, risk_percent=0.01):
+        """
+        Risk of ruin is the probability of losing a defined amount of the starting capital.
+        This assumes the user sets a "risk percent" for each trade or day.
+        """
+        avg_return = self.avg_return(returns)
+        std_dev = returns.std()
+        if std_dev == 0:
+            return 0  # Avoid division by zero
+        z_score = (0 - avg_return) / std_dev
+        return 1 - (np.exp(-2 * risk_percent * z_score))
+
+    # Utility methods (from utils.py)
+    def remove_outliers(self, returns, threshold=3):
+        mean = np.mean(returns)
+        std = np.std(returns)
+        return returns[np.abs(returns - mean) < threshold * std]
+
+    def gain_to_pain_ratio(self, returns):
+        return np.sum(returns) / np.abs(np.sum(returns[returns < 0]))
+
+    # Data processing methods (from data_processing.py)
+    def load_data(self, filepath):
+        return pd.read_csv(filepath, index_col=0, parse_dates=True)
+
+    def prepare_returns(self, data):
+        return data.pct_change().dropna()
+
 
 # Example usage in __main__ section
 if __name__ == "__main__":

@@ -1,7 +1,11 @@
 import plotly.graph_objects as go
 import plotly.express as px
+import plotly.io as pio
 import pandas as pd
 import numpy as np
+import calendar
+import copy
+from data_analytics import DataAnalytics
 
 class QuickPlot:
     def __init__(self):
@@ -262,6 +266,325 @@ class QuickPlot:
             ]
         )
         return fig
+
+class QuantStatsPlot:
+    def __init__(self):
+        self.stats = DataAnalytics()
+
+    def update_layout(self, fig, title, xaxis_title, yaxis_title):
+        fig.update_layout(
+            title={
+                'text': title,
+                'y': 0.95,
+                'x': 0.5,
+                'xanchor': 'center',
+                'yanchor': 'top',
+                'font': {'size': 20, 'family': 'Arial'}
+            },
+            xaxis_title=xaxis_title,
+            yaxis_title=yaxis_title,
+            font=dict(family='Arial', size=12),
+            paper_bgcolor='white',
+            plot_bgcolor='white',
+            hovermode="x",
+            xaxis=dict(showgrid=False, zeroline=False, linecolor='black'),
+            yaxis=dict(showgrid=True, gridcolor='lightgray', zeroline=False, linecolor='black'),
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1,
+                bgcolor="rgba(255, 255, 255, 0.5)",
+                bordercolor="Black",
+                borderwidth=1
+            )
+        )
+
+    # Reusable method to create line plots
+    def create_line_plot(self, data, name, color, title, xaxis_title, yaxis_title):
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=data.index, y=data, mode='lines', name=name, line=dict(width=2, color=color)))
+        self.update_layout(fig, title, xaxis_title, yaxis_title)
+        return fig
+
+    # Reusable method for bar plots
+    def create_bar_plot(self, x_data, y_data, name, color, title, xaxis_title, yaxis_title):
+        fig = go.Figure()
+        fig.add_trace(go.Bar(x=x_data, y=y_data, name=name, marker_color=color))
+        self.update_layout(fig, title, xaxis_title, yaxis_title)
+        return fig
+
+    def plot_rolling_sharpe(self, strategy_returns, window=126, risk_free_rate=0):
+        rolling_sharpe = (strategy_returns.rolling(window).mean() - risk_free_rate) / strategy_returns.rolling(window).std()
+        return self.create_line_plot(rolling_sharpe, f'Rolling {window}-Day Sharpe', '#d62728', f'Rolling Sharpe Ratio ({window}-Day)', 'Date', 'Sharpe Ratio')
+
+    def plot_rolling_sortino(self, strategy_returns, window=126, risk_free_rate=0):
+        downside_risk = strategy_returns[strategy_returns < risk_free_rate].rolling(window).std()
+        rolling_sortino = (strategy_returns.rolling(window).mean() - risk_free_rate) / downside_risk
+        return self.create_line_plot(rolling_sortino, f'Rolling {window}-Day Sortino', '#9467bd', f'Rolling Sortino Ratio ({window}-Day)', 'Date', 'Sortino Ratio')
+
+    def plot_underwater(self, drawdown_series):
+        return self.create_line_plot(drawdown_series, 'Drawdown', '#1f77b4', 'Underwater Plot (Cumulative Drawdowns)', 'Date', 'Drawdown')
+
+    def plot_rolling_volatility(self, strategy_returns, window=126):
+        rolling_volatility = strategy_returns.rolling(window).std()
+        return self.create_line_plot(rolling_volatility, f'Rolling {window}-Day Volatility', '#2ca02c', f'Rolling Volatility ({window}-Day)', 'Date', 'Volatility')
+
+    def plot_daily_returns(self, strategy_returns):
+        return self.create_line_plot(strategy_returns, 'Daily Returns', '#1f77b4', 'Daily Returns', 'Date', 'Returns')
+
+    def plot_distribution_of_monthly_returns(self, strategy_returns):
+        monthly_returns = strategy_returns.resample('M').apply(self.stats.comp)
+        fig = px.histogram(monthly_returns, nbins=50)
+        self.update_layout(fig, 'Distribution of Monthly Returns', 'Monthly Returns', 'Frequency')
+        return fig
+
+    def key_performance_metrics(self, strategy_returns, benchmark_returns):
+        data = {
+            "Metric": ["Sharpe Ratio", "Sortino Ratio", "CAGR", "Max Drawdown"],
+            "Strategy": [self.stats.sharpe(strategy_returns), self.stats.sortino(strategy_returns), self.stats.cagr(strategy_returns), self.stats.max_drawdown(strategy_returns.cumsum())],
+            "Benchmark": [self.stats.sharpe(benchmark_returns), self.stats.sortino(benchmark_returns), self.stats.cagr(benchmark_returns), self.stats.max_drawdown(benchmark_returns.cumsum())]
+        }
+        df = pd.DataFrame(data)
+        fig = go.Figure(data=[go.Table(
+            header=dict(values=list(df.columns), fill_color='paleturquoise', align='left', font=dict(size=12)),
+            cells=dict(values=[df.Metric, df.Strategy, df.Benchmark], fill_color='lavender', align='left', font=dict(size=12))
+        )])
+        fig.update_layout(title='Key Performance Metrics')
+        return fig
+
+    def plot_eoy_returns(self, strategy_returns, benchmark_returns):
+        strategy_eoy = strategy_returns.resample('Y').apply(self.stats.comp)
+        benchmark_eoy = benchmark_returns.resample('Y').apply(self.stats.comp)
+        fig = self.create_bar_plot(strategy_eoy.index.year, strategy_eoy, 'Strategy', '#1f77b4', 'EOY Returns vs Benchmark', 'Year', 'Returns')
+        fig.add_trace(go.Bar(x=benchmark_eoy.index.year, y=benchmark_eoy, name='Benchmark', marker_color='#ff7f0e'))
+        return fig
+
+    def plot_cumulative_returns(self, strategy_returns, benchmark_returns):
+        cumulative_strategy = strategy_returns.cumsum()
+        cumulative_benchmark = benchmark_returns.cumsum()
+
+        # Linear scale plot
+        fig_linear = self.create_line_plot(cumulative_strategy, 'Strategy', '#1f77b4', 'Cumulative Returns vs SPY', 'Date', 'Cumulative Returns')
+        fig_linear.add_trace(go.Scatter(x=cumulative_benchmark.index, y=cumulative_benchmark, mode='lines', name='Benchmark', line=dict(width=3, dash='dash', color='#ff7f0e')))
+        
+        # Deep copy for log scale plot
+        fig_log = copy.deepcopy(fig_linear)
+        fig_log.update_yaxes(type='log')
+
+        return fig_linear, fig_log
+
+    def plot_volatility_matched_returns(self, strategy_returns, benchmark_returns):
+        volatility_ratio = strategy_returns.std() / benchmark_returns.std()
+        matched_returns = strategy_returns / volatility_ratio
+        cumulative_matched = matched_returns.cumsum()
+        cumulative_benchmark = benchmark_returns.cumsum()
+        fig = self.create_line_plot(cumulative_matched, 'Volatility Matched Strategy', '#1f77b4', 'Cumulative Returns vs SPY (Volatility Matched)', 'Date', 'Cumulative Returns')
+        fig.add_trace(go.Scatter(x=cumulative_benchmark.index, y=cumulative_benchmark, mode='lines', name='Benchmark', line=dict(width=3, dash='dash', color='#ff7f0e')))
+        return fig
+
+    def plot_rolling_beta(self, strategy_returns, benchmark_returns, window=126):
+        rolling_beta = strategy_returns.rolling(window).cov(benchmark_returns) / benchmark_returns.rolling(window).var()
+        return self.create_line_plot(rolling_beta, 'Rolling Beta', '#2ca02c', 'Rolling Beta (6-Months)', 'Date', 'Beta')
+
+    def plot_monthly_returns_heatmap(self, strategy_returns):
+        monthly = strategy_returns.resample('M').apply(self.stats.comp)
+        monthly_df = monthly.to_frame(name='Returns')
+        monthly_df['Year'] = monthly_df.index.year
+        monthly_df['Month'] = monthly_df.index.month
+        heatmap_data = monthly_df.pivot(index='Year', columns='Month', values='Returns')
+        fig = go.Figure(data=go.Heatmap(z=heatmap_data.values, x=[calendar.month_abbr[m] for m in heatmap_data.columns], y=heatmap_data.index, colorscale='Viridis', hoverongaps=False))
+        self.update_layout(fig, 'Monthly Returns Heatmap', 'Month', 'Year')
+        return fig
+
+    def plot_top_5_drawdowns(self, drawdown_series):
+        drawdown_periods = self.stats.drawdown_details(drawdown_series)
+        top_5 = drawdown_periods.nsmallest(5, 'drawdown')
+        fig = go.Figure()
+        for _, row in top_5.iterrows():
+            fig.add_trace(go.Scatter(x=[row['start'], row['end']], y=[row['drawdown'], row['drawdown']], mode='lines', name=f"{row['start']} - {row['end']}"))
+        self.update_layout(fig, 'Top 5 Drawdown Periods', 'Date', 'Drawdown')
+        return fig
+
+    def plot_return_quantiles(self, strategy_returns):
+        return_periods = {
+            'Daily': strategy_returns,
+            'Weekly': strategy_returns.resample('W').sum(),
+            'Monthly': strategy_returns.resample('M').sum(),
+            'Quarterly': strategy_returns.resample('Q').sum(),
+            'Yearly': strategy_returns.resample('Y').sum()
+        }
+        fig = go.Figure()
+        for period, returns in return_periods.items():
+            fig.add_trace(go.Box(y=returns, name=period))
+        self.update_layout(fig, 'Return Quantiles', 'Return Periods', 'Returns')
+        return fig
+
+    def generate_report(self, strategy_returns, drawdown_series, benchmark_returns, output_path='quantstats_report.html'):
+        html_content = """
+        <html>
+        <head>
+            <title>Strategy Tearsheet Report</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; }}
+                .container {{ display: flex; }}
+                .left {{ width: 70%; padding-right: 20px; }}
+                .right {{ width: 30%; background-color: #f9f9f9; padding-left: 20px; }}
+                table {{ border-collapse: collapse; width: 100%; margin-bottom: 20px; }}
+                th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+                th {{ background-color: #f2f2f2; }}
+                h2 {{ border-bottom: 1px solid #ddd; padding-bottom: 10px; }}
+            </style>
+        </head>
+        <body>
+            <h1>Strategy Tearsheet</h1>
+            <h4>Data from {start} to {end}</h4>
+            <div class="container">
+                <div class="left">
+        """.format(
+            start=strategy_returns.index.min().strftime('%d %b, %Y'),
+            end=strategy_returns.index.max().strftime('%d %b, %Y')
+        )
+
+        # Cumulative Returns (Linear and Log)
+        cumulative_returns_fig, cumulative_returns_log_fig = self.plot_cumulative_returns(strategy_returns, benchmark_returns)
+        html_content += "<h2>Cumulative Returns vs Benchmark</h2>"
+        html_content += pio.to_html(cumulative_returns_fig, full_html=False)
+        html_content += pio.to_html(cumulative_returns_log_fig, full_html=False)
+
+        # Volatility Matched Returns
+        volatility_matched_fig = self.plot_volatility_matched_returns(strategy_returns, benchmark_returns)
+        html_content += "<h2>Cumulative Returns vs SPY (Volatility Matched)</h2>"
+        html_content += pio.to_html(volatility_matched_fig, full_html=False)
+
+        # End of Year (EOY) Returns
+        eoy_returns_fig = self.plot_eoy_returns(strategy_returns, benchmark_returns)
+        html_content += "<h2>EOY Returns vs Benchmark</h2>"
+        html_content += pio.to_html(eoy_returns_fig, full_html=False)
+
+        # Distribution of Monthly Returns
+        distribution_fig = self.plot_distribution_of_monthly_returns(strategy_returns)
+        html_content += "<h2>Distribution of Monthly Returns</h2>"
+        html_content += pio.to_html(distribution_fig, full_html=False)
+
+        # Daily Returns
+        daily_returns_fig = self.plot_daily_returns(strategy_returns)
+        html_content += "<h2>Daily Returns</h2>"
+        html_content += pio.to_html(daily_returns_fig, full_html=False)
+
+        # Rolling Beta
+        rolling_beta_fig = self.plot_rolling_beta(strategy_returns, benchmark_returns)
+        html_content += "<h2>Rolling Beta (6-Months)</h2>"
+        html_content += pio.to_html(rolling_beta_fig, full_html=False)
+
+        # Rolling Volatility
+        rolling_volatility_fig = self.plot_rolling_volatility(strategy_returns)
+        html_content += "<h2>Rolling Volatility (6-Months)</h2>"
+        html_content += pio.to_html(rolling_volatility_fig, full_html=False)
+
+        # Rolling Sharpe
+        rolling_sharpe_fig = self.plot_rolling_sharpe(strategy_returns)
+        html_content += "<h2>Rolling Sharpe (6-Months)</h2>"
+        html_content += pio.to_html(rolling_sharpe_fig, full_html=False)
+
+        # Rolling Sortino
+        rolling_sortino_fig = self.plot_rolling_sortino(strategy_returns)
+        html_content += "<h2>Rolling Sortino (6-Months)</h2>"
+        html_content += pio.to_html(rolling_sortino_fig, full_html=False)
+
+        # Top 5 Drawdown Periods
+        top_5_drawdowns_fig = self.plot_top_5_drawdowns(strategy_returns.cumsum())
+        html_content += "<h2>Top 5 Drawdown Periods</h2>"
+        html_content += pio.to_html(top_5_drawdowns_fig, full_html=False)
+
+        # Underwater Plot
+        underwater_fig = self.plot_underwater(strategy_returns.cumsum())
+        html_content += "<h2>Underwater Plot (Cumulative Drawdowns)</h2>"
+        html_content += pio.to_html(underwater_fig, full_html=False)
+
+        # Monthly Returns Heatmap
+        monthly_heatmap_fig = self.plot_monthly_returns_heatmap(strategy_returns)
+        html_content += "<h2>Monthly Returns Heatmap</h2>"
+        html_content += pio.to_html(monthly_heatmap_fig, full_html=False)
+
+        # Return Quantiles
+        return_quantiles_fig = self.plot_return_quantiles(strategy_returns)
+        html_content += "<h2>Return Quantiles</h2>"
+        html_content += pio.to_html(return_quantiles_fig, full_html=False)
+
+        # Close the left section
+        html_content += "</div>"
+
+        # Open the right section for tables
+        html_content += "<div class='right'>"
+
+        # Key Performance Metrics Table
+        performance_metrics = {
+            "Metric": ["Sharpe", "Sortino", "CAGR", "Max Drawdown", "Volatility", "Calmar"],
+            "Strategy": [
+                self.stats.sharpe(strategy_returns),
+                self.stats.sortino(strategy_returns),
+                self.stats.cagr(strategy_returns),
+                self.stats.max_drawdown(strategy_returns.cumsum()),
+                strategy_returns.std(),
+                self.stats.calmar(strategy_returns, drawdown_series)
+            ],
+            "Benchmark": [
+                self.stats.sharpe(benchmark_returns),
+                self.stats.sortino(benchmark_returns),
+                self.stats.cagr(benchmark_returns),
+                self.stats.max_drawdown(benchmark_returns.cumsum()),
+                benchmark_returns.std(),
+                self.stats.calmar(benchmark_returns, drawdown_series)
+            ]
+        }
+        perf_metrics_df = pd.DataFrame(performance_metrics)
+        html_content += "<h2>Key Performance Metrics</h2>"
+        html_content += perf_metrics_df.to_html(index=False)
+
+        # Additional Metric Tables
+        other_metrics = {
+            "Metric": ["Payoff Ratio", "Tail Ratio", "Common Sense Ratio", "Risk of Ruin", "Gain to Pain Ratio"],
+            "Value": [
+                self.stats.payoff_ratio(strategy_returns),
+                self.stats.tail_ratio(strategy_returns),
+                self.stats.common_sense_ratio(strategy_returns, drawdown_series),
+                self.stats.risk_of_ruin(strategy_returns),
+                self.stats.gain_to_pain_ratio(strategy_returns)
+            ]
+        }
+        other_metrics_df = pd.DataFrame(other_metrics)
+        html_content += "<h2>Additional Performance Metrics</h2>"
+        html_content += other_metrics_df.to_html(index=False)
+
+        # Add EOY Returns Table
+        eoy_table = pd.DataFrame({
+            "Year": strategy_returns.resample('Y').sum().index.year,
+            "Benchmark": benchmark_returns.resample('Y').sum().values,
+            "Strategy": strategy_returns.resample('Y').sum().values
+        })
+        eoy_table_html = eoy_table.to_html(index=False)
+        html_content += "<h2>EOY Returns Table</h2>"
+        html_content += eoy_table_html
+
+        # Add Drawdown Details Table
+        drawdown_table = self.stats.drawdown_details(strategy_returns)
+        drawdown_table_html = drawdown_table.to_html(index=False)
+        html_content += "<h2>Worst Drawdown Periods</h2>"
+        html_content += drawdown_table_html
+
+        # Close the right section and container
+        html_content += "</div></div>"
+
+        # End of HTML content
+        html_content += "</body></html>"
+
+        # Write to HTML file
+        with open(output_path, 'w') as file:
+            file.write(html_content)
+
+        print(f"Comprehensive report generated at {output_path}")
 
 
 if __name__ == "__main__":
