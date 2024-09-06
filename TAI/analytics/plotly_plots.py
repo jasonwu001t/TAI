@@ -389,13 +389,49 @@ class QuantStatsPlot:
         return self.create_line_plot(rolling_beta, 'Rolling Beta', '#2ca02c', 'Rolling Beta (6-Months)', 'Date', 'Beta')
 
     def plot_monthly_returns_heatmap(self, strategy_returns):
+        # Resample returns by month
         monthly = strategy_returns.resample('M').apply(self.stats.comp)
+        
+        # Create a DataFrame with monthly returns
         monthly_df = monthly.to_frame(name='Returns')
         monthly_df['Year'] = monthly_df.index.year
         monthly_df['Month'] = monthly_df.index.month
         heatmap_data = monthly_df.pivot(index='Year', columns='Month', values='Returns')
-        fig = go.Figure(data=go.Heatmap(z=heatmap_data.values, x=[calendar.month_abbr[m] for m in heatmap_data.columns], y=heatmap_data.index, colorscale='Viridis', hoverongaps=False))
-        self.update_layout(fig, 'Monthly Returns Heatmap', 'Month', 'Year')
+        
+        # Format the numbers to be displayed as text in the heatmap cells
+        text_values = heatmap_data.applymap(lambda x: '{:.2f}'.format(x) if pd.notnull(x) else '')
+        
+        # Define a custom colorscale with adjusted colors
+        custom_colorscale = [
+            [0.0, '#ff9999'],  # Lighter red for lower values (losses)
+            [0.5, '#ffffcc'],  # Light yellow for neutral values
+            [1.0, '#99ff99']   # Light green for higher values (gains)
+        ]
+        
+        # Create the heatmap with annotations
+        fig = go.Figure(data=go.Heatmap(
+            z=heatmap_data.values,
+            x=[calendar.month_abbr[m] for m in heatmap_data.columns],
+            y=heatmap_data.index,
+            colorscale=custom_colorscale,  # Use the custom light red-yellow-green colorscale
+            hoverongaps=False,
+            text=text_values.values,  # Add the text annotations
+            texttemplate="%{text}",  # Use the text values for the cell labels
+            textfont={"size": 10}  # Control the size of the text
+        ))
+        
+        # Update the layout for the heatmap
+        fig.update_layout(
+            title='Monthly Returns Heatmap',
+            xaxis_title='Month',
+            yaxis_title='Year',
+            yaxis=dict(
+                tickmode='array',
+                tickvals=heatmap_data.index,  # Ensure only integer years are shown
+                ticktext=[str(int(year)) for year in heatmap_data.index]  # Display years as integers
+            )
+        )
+        
         return fig
 
     def plot_top_5_drawdowns(self, drawdown_series):
