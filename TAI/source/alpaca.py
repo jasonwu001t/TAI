@@ -71,6 +71,19 @@ class Alpaca:
             expiration_date_gte (Optional[Union[date, str]]): Filter contracts with expiration date greater than or equal to the specified date.
             expiration_date_lte (Optional[Union[date, str]]): Filter contracts with expiration date less than or equal to the specified date.
             root_symbol (Optional[str]):                    Filter contracts by the root symbol.
+
+        eg input:
+                underlying_symbol='SPY',
+                feed=None,
+                type=None,
+                strike_price_gte=None, #550.0,
+                strike_price_lte=None, #560.0,
+                expiration_date='2024-12-20',
+                expiration_date_gte=None,
+                expiration_date_lte=None,
+                root_symbol=None,
+                raw=False,
+                chain_table=True)
         """
         req = OptionChainRequest(underlying_symbol=underlying_symbol,
                                     feed=feed,
@@ -155,8 +168,8 @@ class Alpaca:
                                         root_symbol = root_symbol,
                                         type = type, #'call' or 'put'
                                         style = None, #'american', #'American' or 'Europe'?
-                                        strike_price_gte = str(strike_price_gte), #'550.0', #'550.0', # '550.0'
-                                        strike_price_lte = str(strike_price_lte), # '560.0', #'560.0', # '560.0'
+                                        strike_price_gte = str(strike_price_gte) if strike_price_gte is not None else None, #'550.0', #'550.0', # '550.0'
+                                        strike_price_lte = str(strike_price_lte) if strike_price_lte is not None else None, # '560.0', #'560.0', # '560.0'
                                         limit = 10000, #default is 100, max = 10,000
                                         page_token = None,
                                         raw=False)
