@@ -328,7 +328,7 @@ class Alpaca:
             )
             return req if raw else self.option_md_client.get_option_trades(req).df
 
-    def get_lastest_quote(self, symbol_or_symbols, asset='stock'):
+    def get_latest_quote(self, symbol_or_symbols, asset='stock'):
         """Fetches the latest quote for the given stock or option symbol(s)."""
         if asset == 'stock':
             req = StockLatestQuoteRequest(symbol_or_symbols=symbol_or_symbols)
@@ -379,7 +379,7 @@ class Alpaca:
     def get_stock_historical(self, symbol_or_symbols, lookback_period, 
                              timeframe='Day', end=None, currency='USD', 
                              limit=None, adjustment='all', feed=None, 
-                             asof=None, sort='asc', raw=False):
+                             asof=None, sort='asc', raw=False, ohlc=False):
         """
         Attributes:
         symbol_or_symbols (Union[str, List[str]]): The ticker identifier or list of ticker identifiers.
@@ -421,7 +421,12 @@ class Alpaca:
             sort=sort,
         )
         res = self.stock_md_client.get_stock_bars(request_params)
-        return res if raw else res.df.reset_index()[['symbol', 'timestamp', 'open', 'high', 'low', 'close', 'volume', 'trade_count', 'vwap']]
+        res1 = res if raw else res.df.reset_index()[['symbol', 'timestamp', 'open', 'high', 'low', 'close', 'volume', 'trade_count', 'vwap']]
+        if ohlc == False:
+            return res1
+        else: #return yfinnace standard output
+            trimmed_df = res1[['timestamp','open','high','low','close','volume']].set_index('timestamp')
+            return trimmed_df
 
 if __name__ == "__main__":
     alpaca = Alpaca()
