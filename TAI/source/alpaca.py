@@ -5,14 +5,14 @@ import pandas as pd
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from alpaca.data.historical import (StockHistoricalDataClient, 
+from alpaca.data.historical import (StockHistoricalDataClient,
                                     OptionHistoricalDataClient)
-from alpaca.data.requests import (StockBarsRequest, 
+from alpaca.data.requests import (StockBarsRequest,
                                   OptionChainRequest,
                                   OptionSnapshotRequest,
-                                  StockLatestTradeRequest, 
+                                  StockLatestTradeRequest,
                                   StockLatestQuoteRequest,
-                                  OptionBarsRequest, 
+                                  OptionBarsRequest,
                                   OptionTradesRequest,
                                   OptionLatestQuoteRequest,
                                   OptionLatestTradeRequest)
@@ -22,6 +22,7 @@ from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import (MarketOrderRequest, GetOrdersRequest,
                                      GetAssetsRequest, GetOptionContractsRequest)
 from alpaca.trading.enums import OrderSide, TimeInForce, AssetStatus, ContractType
+
 
 class AlpacaAuth:
     def __init__(self):
@@ -39,6 +40,7 @@ class AlpacaAuth:
     def get_option_md_client(self):
         return OptionHistoricalDataClient(self.api_key, self.api_secret)
 
+
 class Alpaca:
     def __init__(self):
         auth = AlpacaAuth()
@@ -46,20 +48,20 @@ class Alpaca:
         self.trade_client = auth.get_trade_client()
         self.stock_md_client = auth.get_stock_md_client()
         self.option_md_client = auth.get_option_md_client()
-    
-    def get_option_chain(self,underlying_symbol,  #eg. 'MSFT'
-                            strike_price_gte,
-                            strike_price_lte,
-                            expiration_date_gte,
-                            expiration_date_lte,
-                            type = None, # call, or put
-                            expiration_date = None,
-                            feed = None,
-                            root_symbol =None,
-                            raw = False,
-                            join_contracts = True,
-                            chain_table=True  # Convert to Tranditional Train table, although we will lose some columns
-                            ):  
+
+    def get_option_chain(self, underlying_symbol,  # eg. 'MSFT'
+                         strike_price_gte,
+                         strike_price_lte,
+                         expiration_date_gte,
+                         expiration_date_lte,
+                         type=None,  # call, or put
+                         expiration_date=None,
+                         feed=None,
+                         root_symbol=None,
+                         raw=False,
+                         join_contracts=True,
+                         chain_table=True  # Convert to Tranditional Train table, although we will lose some columns
+                         ):
         """
         Attributes:
             underlying_symbol (str):                        The underlying_symbol for option contracts.
@@ -86,22 +88,23 @@ class Alpaca:
                 chain_table=True)
         """
         req = OptionChainRequest(underlying_symbol=underlying_symbol,
-                                    feed=feed,
-                                    type=type,
-                                    strike_price_gte=strike_price_gte,
-                                    strike_price_lte=strike_price_lte,
-                                    expiration_date=expiration_date,
-                                    expiration_date_gte=expiration_date_gte,
-                                    expiration_date_lte=expiration_date_lte,
-                                    root_symbol=root_symbol,)
+                                 feed=feed,
+                                 type=type,
+                                 strike_price_gte=strike_price_gte,
+                                 strike_price_lte=strike_price_lte,
+                                 expiration_date=expiration_date,
+                                 expiration_date_gte=expiration_date_gte,
+                                 expiration_date_lte=expiration_date_lte,
+                                 root_symbol=root_symbol,)
         res = self.option_md_client.get_option_chain(req)
 
         if len(res) == 0:
-            raise KeyError('Check if the expiration_date is available or other input error')
+            raise KeyError(
+                'Check if the expiration_date is available or other input error')
 
         if raw == True:
             return res
-        else: # Convert to dataframe
+        else:  # Convert to dataframe
             symbols = []
             greeks_data = []
             implied_volatilities = []
@@ -111,11 +114,12 @@ class Alpaca:
             # Loop through the dictionary and extract relevant fields
             for symbol, details in res.items():
                 symbols.append(symbol)
-                
+
                 # Extract greeks or handle None by using getattr() if it's an object
                 greeks_obj = getattr(details, 'greeks', None)
                 if greeks_obj is None:
-                    greeks = {'delta': None, 'gamma': None, 'rho': None, 'theta': None, 'vega': None}
+                    greeks = {'delta': None, 'gamma': None,
+                              'rho': None, 'theta': None, 'vega': None}
                 else:
                     greeks = {
                         'delta': getattr(greeks_obj, 'delta', None),
@@ -125,10 +129,11 @@ class Alpaca:
                         'vega': getattr(greeks_obj, 'vega', None),
                     }
                 greeks_data.append(greeks)
-                
+
                 # Extract implied volatility
-                implied_volatilities.append(getattr(details, 'implied_volatility', None))
-                
+                implied_volatilities.append(
+                    getattr(details, 'implied_volatility', None))
+
                 # Extract latest quote details
                 latest_quote = getattr(details, 'latest_quote', None)
                 latest_quotes.append({
@@ -143,7 +148,9 @@ class Alpaca:
                 # Extract latest trade details or handle None
                 latest_trade = getattr(details, 'latest_trade', None)
                 if latest_trade is None:
-                    latest_trades.append({'price': None, 'size': None, 'exchange': None})#, 'timestamp': None})
+                    # , 'timestamp': None})
+                    latest_trades.append(
+                        {'price': None, 'size': None, 'exchange': None})
                 else:
                     latest_trades.append({
                         'price': getattr(latest_trade, 'price', None),
@@ -153,33 +160,44 @@ class Alpaca:
                     })
             # Create DataFrames for each part of the data
             greeks_df = pd.DataFrame(greeks_data)
-            implied_vol_df = pd.DataFrame(implied_volatilities, columns=['implied_volatility'])
+            implied_vol_df = pd.DataFrame(
+                implied_volatilities, columns=['implied_volatility'])
             quotes_df = pd.DataFrame(latest_quotes)
             trades_df = pd.DataFrame(latest_trades)
             # Combine all the extracted DataFrames into one
-            combined_df = pd.concat([pd.Series(symbols, name='symbol'), greeks_df, implied_vol_df, quotes_df, trades_df], axis=1)
+            combined_df = pd.concat([pd.Series(
+                symbols, name='symbol'), greeks_df, implied_vol_df, quotes_df, trades_df], axis=1)
 
             if join_contracts == True:
                 contracts = self.get_option_contracts(
-                                        underlying_symbols = [underlying_symbol],
-                                        expiration_date = expiration_date, #'2024-09-20'
-                                        expiration_date_gte = expiration_date_gte,
-                                        expiration_date_lte = expiration_date_lte,
-                                        root_symbol = root_symbol,
-                                        type = type, #'call' or 'put'
-                                        style = None, #'american', #'American' or 'Europe'?
-                                        strike_price_gte = str(strike_price_gte) if strike_price_gte is not None else None, #'550.0', #'550.0', # '550.0'
-                                        strike_price_lte = str(strike_price_lte) if strike_price_lte is not None else None, # '560.0', #'560.0', # '560.0'
-                                        limit = 10000, #default is 100, max = 10,000
-                                        page_token = None,
-                                        raw=False)
-                merged_table = pd.merge(combined_df, contracts, on='symbol', how='inner')
+                    underlying_symbols=[underlying_symbol],
+                    expiration_date=expiration_date,  # '2024-09-20'
+                    expiration_date_gte=expiration_date_gte,
+                    expiration_date_lte=expiration_date_lte,
+                    root_symbol=root_symbol,
+                    type=type,  # 'call' or 'put'
+                    style=None,  # 'american', #'American' or 'Europe'?
+                    # '550.0', #'550.0', # '550.0'
+                    strike_price_gte=str(
+                        strike_price_gte) if strike_price_gte is not None else None,
+                    # '560.0', #'560.0', # '560.0'
+                    strike_price_lte=str(
+                        strike_price_lte) if strike_price_lte is not None else None,
+                    limit=10000,  # default is 100, max = 10,000
+                    page_token=None,
+                    raw=False)
+                merged_table = pd.merge(
+                    combined_df, contracts, on='symbol', how='inner')
                 if chain_table == True:
                     # Assuming 'data' is the base Pandas DataFrame
                     # Split the data into Calls and Puts
-                    calls = merged_table[merged_table['type'] == 'call'].set_index('strike_price')
-                    puts = merged_table[merged_table['type'] == 'put'].set_index('strike_price')
-                    option_chain = pd.concat([calls, puts], axis=1, keys=['Call', 'Put'])# Join the two DataFrames on the strike price to ensure alignment
+                    calls = merged_table[merged_table['type']
+                                         == 'call'].set_index('strike_price')
+                    puts = merged_table[merged_table['type']
+                                        == 'put'].set_index('strike_price')
+                    # Join the two DataFrames on the strike price to ensure alignment
+                    option_chain = pd.concat(
+                        [calls, puts], axis=1, keys=['Call', 'Put'])
                     # Create the option chain table structure
                     option_chain_table = pd.DataFrame({
                         'Call Bid x Ask': option_chain['Call'].apply(lambda x: f"{x['bid_price']} x {x['ask_price']}" if pd.notnull(x['bid_price']) else None, axis=1),
@@ -197,27 +215,31 @@ class Alpaca:
                         'Put Gamma': option_chain['Put']['gamma'],
                         'Put Vega': option_chain['Put']['vega'],
                         'Put Theta': option_chain['Put']['theta']
-                        })
-                    option_chain_table.dropna(how='all', inplace=True)# Drop rows where both Call and Put data are missing
-                    option_chain_table.sort_values(by='Strike', inplace=True)# Sort by Strike price
-                    option_chain_table.reset_index(drop=True, inplace=True)# Reset the index without adding it to the table, keeping Strike column in the middle
+                    })
+                    # Drop rows where both Call and Put data are missing
+                    option_chain_table.dropna(how='all', inplace=True)
+                    option_chain_table.sort_values(
+                        by='Strike', inplace=True)  # Sort by Strike price
+                    # Reset the index without adding it to the table, keeping Strike column in the middle
+                    option_chain_table.reset_index(drop=True, inplace=True)
                     return option_chain_table
                 else:
                     return merged_table
             else:
                 return combined_df
 
-    def get_option_snapshot(self,symbol_or_symbols,feed):
+    def get_option_snapshot(self, symbol_or_symbols, feed):
         """
         Attributes:
         symbol_or_symbols (Union[str, List[str]]):      The option identifier or list of option identifiers.
         feed (Optional[OptionsFeed]):                   The source feed of the data. `opra` or `indicative`. Default: `opra` if the user has the options subscription, `indicative` otherwise.
-        
+
         req = OptionSnapshotRequest(symbol_or_symbols=['SPY240906C00497000'])
         self.option_md_client.get_option_snapshot(req)
         """
 
-        req = OptionSnapshotRequest(symbol_or_symbols=symbol_or_symbols, feed=feed)
+        req = OptionSnapshotRequest(
+            symbol_or_symbols=symbol_or_symbols, feed=feed)
         res = self.option_md_client.get_option_snapshot(req)
         return res
 
@@ -246,12 +268,12 @@ class Alpaca:
             }
             option_contracts.append(contract_dict)
         return pd.DataFrame(option_contracts)
-    
-    def get_option_contracts(self, underlying_symbols, expiration_date=None, 
-                         expiration_date_gte=None, expiration_date_lte=None,
-                         root_symbol=None, type=None, style=None, 
-                         strike_price_gte=None, strike_price_lte=None, 
-                         limit=10000, page_token=None, raw=False):
+
+    def get_option_contracts(self, underlying_symbols, expiration_date=None,
+                             expiration_date_gte=None, expiration_date_lte=None,
+                             root_symbol=None, type=None, style=None,
+                             strike_price_gte=None, strike_price_lte=None,
+                             limit=10000, page_token=None, raw=False):
         """the output is alpaca.trading.models.OptionContractsResponse instead of raw json
          Try quote.prce instead of quote['price']. If you need a raw json access, you can do quote._raw['price']
 
@@ -286,8 +308,8 @@ class Alpaca:
         res = self.trade_client.get_option_contracts(req)
         return res if raw else self.option_contracts_to_df(res)
 
-    def get_option_historical(self, option_symbol_or_symbols, lookback_period, 
-                              end=None, timeframe='Day', limit=10000, 
+    def get_option_historical(self, option_symbol_or_symbols, lookback_period,
+                              end=None, timeframe='Day', limit=10000,
                               bars_or_trades='bars', raw=False):
         """
         Fetches historical option bars or trades for the given option symbols.
@@ -376,9 +398,9 @@ class Alpaca:
         return self.trade_client.get_orders(filter=orders_request)
 
     # Market Data Handler
-    def get_stock_historical(self, symbol_or_symbols, lookback_period, 
-                             timeframe='Day', end=None, currency='USD', 
-                             limit=None, adjustment='all', feed=None, 
+    def get_stock_historical(self, symbol_or_symbols, lookback_period,
+                             timeframe='Day', end=None, currency='USD',
+                             limit=None, adjustment='all', feed=None,
                              asof=None, sort='asc', raw=False, ohlc=False):
         """
         Attributes:
@@ -421,12 +443,15 @@ class Alpaca:
             sort=sort,
         )
         res = self.stock_md_client.get_stock_bars(request_params)
-        res1 = res if raw else res.df.reset_index()[['symbol', 'timestamp', 'open', 'high', 'low', 'close', 'volume', 'trade_count', 'vwap']]
+        res1 = res if raw else res.df.reset_index(
+        )[['symbol', 'timestamp', 'open', 'high', 'low', 'close', 'volume', 'trade_count', 'vwap']]
         if ohlc == False:
             return res1
-        else: #return yfinnace standard output
-            trimmed_df = res1[['timestamp','open','high','low','close','volume']].set_index('timestamp')
+        else:  # return yfinnace standard output
+            trimmed_df = res1[['timestamp', 'open', 'high',
+                               'low', 'close', 'volume']].set_index('timestamp')
             return trimmed_df
+
 
 if __name__ == "__main__":
     alpaca = Alpaca()
