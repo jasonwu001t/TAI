@@ -4,7 +4,7 @@ from datetime import datetime, date
 from TAI.source import Alpaca
 
 class AlpacaOptionBet:
-    def __init__(self, ticker, expiry_date):
+    def __init__(self, ticker, expiry_date, lookback_period=720):
         self.ap = Alpaca()
     
         self.ticker = ticker
@@ -12,8 +12,9 @@ class AlpacaOptionBet:
         
         self.today = date.today()
         self.today_str = self.today.strftime("%Y-%m-%d")
+        self.lookback_period = lookback_period
         self.df_raw = self.ap.get_stock_historical(symbol_or_symbols=self.ticker, 
-                                                lookback_period=720, 
+                                                lookback_period=self.lookback_period, 
                                                 timeframe='Day', 
                                                 end=None, 
                                                 currency='USD', 

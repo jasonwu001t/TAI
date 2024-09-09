@@ -43,12 +43,12 @@ class IBOptionBet:
         describe['projected_price'] = select_price * (1 + describe['return_perc'])
         describe['percentage_change'] = describe['return_perc'] * 100
         describe['chose_strike'] = describe['projected_price'].astype(int)
-        describe = describe.rename(columns={
-            'Close': "current_price",
-            'return_perc': 'percentage_change',
-            'projected_price': 'projected_price',
-            'chose_strike': 'chose_strike'
-        })
+        # describe = describe.rename(columns={
+        #     'Close': "current_price",
+        #     'return_perc': 'percentage_change',
+        #     'projected_price': 'projected_price',
+        #     'chose_strike': 'chose_strike'
+        # })
         self.ib.disconnect() #disconnect the session each time
         return describe[['current_price', 'percentage_change', 'projected_price', 'chose_strike']]
 
@@ -56,6 +56,6 @@ class IBOptionBet:
 if __name__ == "__main__":
     ticker = 'TSLA'
     chose_expiry_date = '2024-08-02'
-    option_bet = OptionBet(ticker, chose_expiry_date)
+    option_bet = IBOptionBet(ticker, chose_expiry_date)
     describe_df = option_bet.describe_perc_change()
     print(describe_df)
