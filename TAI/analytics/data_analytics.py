@@ -111,7 +111,7 @@ class DataAnalytics:
     	2023-04-03	A	300	100.000000
         """
         total = df.groupby(df.columns[0])[df.columns[2]].transform('sum')
-        df['percentage'] = (df['value'] / total) * 100        # Calculate percentage
+        df['percentage'] = (df.columns[2] / total) * 100        # Calculate percentage
         if pivot_view == True:
             return df.pivot_table(index=df.iloc[:, 0], columns=df.iloc[:, 1], values='percentage').reset_index()
         else:
