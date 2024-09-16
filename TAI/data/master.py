@@ -321,33 +321,36 @@ class DataMaster:
         - use_polars: Whether to save using Polars instead of Pandas (for DataFrames).
         - delete_local: Whether to delete the local file after saving (default: True).
         """
-        if isinstance(data, dict):
-            # Convert int64 to int for JSON serialization
-            def convert_np_types(obj):
-                if isinstance(obj, np.integer):
-                    return int(obj)
-                elif isinstance(obj, np.floating):
-                    return float(obj)
-                elif isinstance(obj, np.ndarray):
-                    return obj.tolist()
-                raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+        # # isinstance(data, dict):
+        #     # Convert int64 to int for JSON serialization
+        #     def convert_np_types(obj):
+        #         if isinstance(obj, np.integer):
+        #             return int(obj)
+        #         elif isinstance(obj, np.floating):
+        #             return float(obj)
+        #         elif isinstance(obj, np.ndarray):
+        #             return obj.tolist()
+        #         raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
 
-            with open(file_path, 'w') as json_file:
-                json.dump(data, json_file, default=convert_np_types)
-            print(f"Dictionary saved as JSON to {file_path}")
-        else:
-            if file_path.endswith('.csv'):
-                if use_polars:
-                    data.write_csv(file_path)
-                else:
-                    data.to_csv(file_path, index=False)
-            elif file_path.endswith('.parquet'):
-                if use_polars:
-                    data.write_parquet(file_path)
-                else:
-                    data.to_parquet(file_path, index=False)
+        #     with open(file_path, 'w') as json_file:
+        #         json.dump(data, json_file, default=convert_np_types)
+        #     print(f"Dictionary saved as JSON to {file_path}")
+        if file_path.endswith('.csv'):
+            if use_polars:
+                data.write_csv(file_path)
             else:
-                raise ValueError("File extension not supported. Please use .csv, .parquet, or .json.")
+                data.to_csv(file_path, index=False)
+        elif file_path.endswith('.parquet'):
+            if use_polars:
+                data.write_parquet(file_path)
+            else:
+                data.to_parquet(file_path, index=False)
+        elif file_path.endswith('.json'):
+            with open(file_path, 'w') as json_file:
+                json.dump(data, json_file)
+                # data = data
+        else:
+            raise ValueError("File extension not supported. Please use .csv, .parquet, or .json.")
 
         if delete_local:
             os.remove(file_path)

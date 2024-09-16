@@ -3,7 +3,7 @@ IN BASH FILE eg. run.sh
 /usr/bin/python3 /home/name/development/app.py
 
 IN CRON: 
-* * * * * /usr/bin/zsh /Users/name/Desktop/test_folder/run.sh
+* * * * * /usr/bin/zsh /home/kopi/dev/us_treasury_app/run.sh >>/home/kopi/dev/us_treasury_app/log.txt 2>&1
 
 
 ########################################################
