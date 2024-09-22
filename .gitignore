@@ -12,10 +12,12 @@ auth.ini
 # C extensions
 *.so
 *.csv
+*.json
 *.parquet
 
 # Distribution / packaging
 __pycache__/
+.chalice/
 .Python
 build/
 develop-eggs/

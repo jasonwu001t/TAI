@@ -448,8 +448,8 @@ class Alpaca:
         if ohlc == False:
             return res1
         else:  # return yfinnace standard output
-            trimmed_df = res1[['timestamp', 'open', 'high',
-                               'low', 'close', 'volume']].set_index('timestamp')
+            trimmed_df = res1[['symbol', 'timestamp', 'open', 'high',
+                               'low', 'close', 'volume']]  # .set_index('timestamp')
             return trimmed_df
 
 
