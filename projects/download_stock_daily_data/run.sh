@@ -1,0 +1,1 @@
+/home/kopi/jtrade1env/bin/python3 /home/kopi/dev/download_stock_daily_data/daily_bar_downloader_v2.py
