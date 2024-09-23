@@ -7,11 +7,11 @@ from datetime import datetime, timedelta
 import os
 
 # Set global variables
-LOOKBACK_YEARS = 10  # For initial data fetch
+LOOKBACK_YEARS = 15  # For initial data fetch
 PRINT_LOG = False    # Toggle for logging
 MAX_CONCURRENT_REQUESTS = 10  # Adjust based on system and API limits
-PARQUET_FILE = 'sp500_daily_ohlc.parquet'  # Parquet file name
-JSON_FILE =  'sp500_daily_ohlc.json'
+PARQUET_FILE = 'stock_daily_ohlc.parquet'  # Parquet file name
+JSON_FILE =  'stock_daily_ohlc.json'
 
 dm = DataMaster()
 
@@ -23,9 +23,7 @@ def get_lookback_period_in_days():
     lookback_period = (today - start_date).days
     return lookback_period, start_date
 
-
 LOOKBACK_PERIOD_DAYS, START_DATE = get_lookback_period_in_days()
-
 
 def get_sp500_symbols():
     """Fetches the list of S&P 500 company symbols from Wikipedia."""
@@ -36,8 +34,96 @@ def get_sp500_symbols():
     symbols = [symbol.replace('.', '-') for symbol in symbols]
     return symbols
 
+def get_nasdaq100_symbols():
+    """Fetch NASDAQ-100 symbols from Wikipedia."""
+    import pandas as pd
+    url = 'https://en.wikipedia.org/wiki/NASDAQ-100'
+    tables = pd.read_html(url)
+    nasdaq100_df = tables[3]  # Adjust the index if necessary
+    symbols = nasdaq100_df['Ticker'].tolist()
+    symbols = [symbol.replace('.', '-') for symbol in symbols]
+    return symbols
+
+def get_popular_stock_symbols():
+    """Returns a list of commonly traded stocks outside the S&P 500."""
+    popular_stocks = [
+        # International Stocks (ADRs)
+        'BABA', 'TCEHY', 'NIO', 'JD', 'PDD', 'RIO', 'SONY', 'BP', 'TOT', 'VWAGY', 'UBS', 'CS', 'SAN',
+        # Technology Stocks
+        'ZM', 'NET', 'SHOP', 'SNOW', 'CRWD', 'PLTR', 'U', 'OKTA', 'TEAM', 'DDOG', 'ZS', 'DOCU', 'FSLY',
+        # Biotech and Pharmaceutical Stocks
+        'MRNA', 'NVAX', 'BNTX', 'SAVA', 'IBIO', 'INO',
+        # Electric Vehicle Stocks
+        'XPEV', 'LI', 'NIO', 'RIVN', 'LCID', 'NKLA',
+        # Cryptocurrency and Blockchain-related Stocks
+        'COIN', 'MARA', 'RIOT', 'SI', 'BTBT', 'MSTR',
+        # Travel and Leisure Stocks
+        'ABNB', 'UBER', 'LYFT', 'SPCE', 'RBLX',
+        # Social Media and Internet Stocks
+        'SNAP', 'PINS', 'TWTR',
+        # Renewable Energy Stocks
+        'RUN', 'SEDG', 'ENPH', 'PLUG', 'BE', 'BLDP',
+        # Other Popular Stocks
+        'GME', 'AMC', 'BB', 'NOK', 'FUBO', 'OPEN', 'DKNG', 'HOOD', 'SOFI', 'AFRM', 'ROKU', 'ETSY', 'SQ', 'PYPL',
+        ]
+    return popular_stocks
+
+def get_common_etf_symbols():
+    """Returns a comprehensive list of commonly traded ETFs."""
+    etf_symbols = [
+        # Broad Market ETFs
+        'SPY', 'IVV', 'VOO', 'VTI', 'ITOT', 'SCHB',
+        # Sector ETFs
+        'XLK', 'XLF', 'XLV', 'XLY', 'XLP', 'XLE', 'XLI', 'XLU', 'XLB', 'XLRE', 'XLC',
+        # International ETFs
+        'EFA', 'IEFA', 'VEA', 'VXUS', 'IXUS', 'VWO', 'IEMG', 'EMXC',
+        # Bond ETFs
+        'BND', 'AGG', 'LQD', 'HYG', 'JNK', 'BNDX', 'TIP', 'TLT', 'IEF', 'SHY',
+        # Commodity ETFs
+        'GLD', 'IAU', 'SLV', 'USO', 'UNG', 'DBC',
+        # Real Estate ETFs
+        'VNQ', 'IYR', 'SCHH', 'XLRE', 'RWR',
+        # Dividend ETFs
+        'VYM', 'DVY', 'SDY', 'SCHD', 'VIG',
+        # Small-Cap ETFs
+        'IWM', 'VB', 'IJR', 'SCHA',
+        # Mid-Cap ETFs
+        'IJH', 'VO', 'IWR',
+        # Growth and Value ETFs
+        'IWF', 'IWD', 'VUG', 'VTV', 'SCHG', 'SCHV',
+        # Currency ETFs
+        'UUP', 'FXE', 'FXY', 'FXB',
+        # Inverse and Leveraged ETFs (use with caution)
+        'SDS', 'QID', 'TZA', 'SSO', 'QLD', 'UCO',
+        # Thematic ETFs
+        'ARKK', 'ARKG', 'ARKW', 'BOTZ', 'KWEB', 'TAN',
+        # Other Popular ETFs
+        'QQQ', 'DIA', 'MDY', 'EEM', 'EWJ', 'EWZ', 'GDX', 'EWT', 'VT',
+        # Emerging Markets ETFs
+        'VWO', 'EEM', 'SCHE', 'IEMG',
+        # Additional ETFs
+        'VTIP', 'MUB', 'EMB', 'BKLN', 'FLOT', 'SRLN', 'BIV', 'BSV', 'BSCJ',
+        'BSCK', 'BSCL', 'BSJM', 'BSJL', 'BSJK', 'BNDW', 'SPDW', 'SPEM',
+        'SCHF', 'SCHZ', 'SCHP', 'SCHA', 'SCHG', 'SCHO', 'SCHR', 'SCHI',
+        'SHE', 'NOBL', 'MTUM', 'QUAL', 'VLUE', 'USMV', 'HDV', 'IUSV',
+        'IUSG', 'IUSB', 'IAGG', 'IEI', 'IWM', 'IJH', 'IWN', 'IWO', 'IWP',
+        'IWS', 'IWL', 'IWL', 'ACWI', 'ACWX', 'AAXJ', 'QAI', 'SDY', 'DIA',
+        'EWG', 'EWH', 'EWU', 'EWT', 'EWW', 'EWY', 'EWA', 'EWO', 'EWL',
+        'EWD', 'EWP', 'EWN', 'EWS', 'EWK', 'EWM', 'EPOL', 'EPI', 'PIN',
+        'RSX', 'FXI', 'ASHR', 'MCHI', 'INDA', 'THD', 'PLND', 'TUR', 'GREK',
+        'NORW', 'EIS', 'ENZL', 'ARGT', 'EZA', 'EWZ', 'EWJ', 'EWY', 'EWM',
+        'EIDO', 'EPU', 'EPHE', 'EIS', 'ECH', 'GXC', 'VNM', 'FM', 'KSA',
+        'MEXX', 'JPNL', 'JPN', 'JOF', 'AXJL', 'AIA', 'IPAC', 'EEMA', 'FNI'
+    ]
+    return etf_symbols
+
 # Fetch S&P 500 symbols
 sp500_symbols = get_sp500_symbols()
+nasdaq100_symbols = get_nasdaq100_symbols()
+
+# Fetch common ETF symbols
+etf_symbols = get_common_etf_symbols()
+popular_stocks = get_popular_stock_symbols()
 
 # Initialize Alpaca class instance
 alpaca_handler = alpaca.Alpaca()
@@ -129,8 +215,8 @@ def update_parquet_with_latest_data():
         # If file doesn't exist, create an empty DataFrame
         existing_data = pd.DataFrame()
 
-    # Use the full list of S&P 500 symbols
-    symbols = sp500_symbols
+    # # Combine symbols
+    symbols = list(set(sp500_symbols + etf_symbols + popular_stocks + nasdaq100_symbols))
 
     # Run async fetch for latest data
     loop = asyncio.get_event_loop()
