@@ -182,9 +182,10 @@ def store_data_in_parquet(df, file_name):
 def convert_to_json(data):
     def convert_timestamp(item):
         if isinstance(item, dict):
-            # Convert 'Timestamp' to ISO 8601 format
+            # Convert 'timestamp' key to 'date' and format the value to 'YYYY-MM-DD'
             if 'timestamp' in item and isinstance(item['timestamp'], pd.Timestamp):
-                item['timestamp'] = item['timestamp'].isoformat()
+                item['date'] = item['timestamp'].date().isoformat()  # Only the date part
+                del item['timestamp']  # Remove the 'timestamp' key
         return item
 
     # Apply the conversion to each dictionary in the list
@@ -193,22 +194,23 @@ def convert_to_json(data):
     # Convert to JSON format (as Python object, not a string)
     return cleaned_data
 
-
 def main():
     print('PROCESS STARTS AT : {}'.format(datetime.now()))
-    # Update the Parquet file with the latest data
-    update_parquet_with_latest_data() # will save or update local parquet file
+    # update_parquet_with_latest_data() # Update the Parquet file with the latest data, will save or update local parquet file
 
     updated_df = dm.load_local(data_folder='data', 
                     file_name = PARQUET_FILE,
                     use_polars = False,
                     load_all = False, 
                     selected_files = [PARQUET_FILE])
-    df_dict = updated_df.to_dict(orient='records')
-    df_json = convert_to_json(df_dict)
+    
+    ###################################
+    # API Can timeout if the output json data is too large, therefore, breakdown to chunches
+    # df_dict = updated_df.to_dict(orient='records')
+    # df_json = convert_to_json(df_dict)
 
-    dm.save_local(df_json, 'data', JSON_FILE,
-                delete_local=False)
+    # dm.save_local(df_json, 'data', JSON_FILE,
+    #             delete_local=False)
     
     # dm.save_s3(df_json,
     #             'jtrade1-dir', 
@@ -216,6 +218,25 @@ def main():
     #             JSON_FILE, 
     #             use_polars=False, 
     #             delete_local=True)
+    ###################################
+
+    grouped = updated_df.groupby('symbol') # Group the data by symbol
+
+    for symbol, group in grouped:
+        df_dict = group.to_dict(orient='records')
+        df_json = convert_to_json(df_dict)
+
+        json_file_name = f'{symbol}.json'
+        dm.save_local(df_json, 'data/stock_daily_bar', json_file_name, delete_local=False)
+
+        dm.save_s3(
+            df_json,
+            'jtrade1-dir',
+            'api/stock_daily_bar',
+            json_file_name,
+            use_polars=False,
+            delete_local=True
+        )
     print('PROCESS ENDS AT : {}'.format(datetime.now()))
 
 if __name__ == "__main__":
