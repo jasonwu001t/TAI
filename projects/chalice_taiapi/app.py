@@ -1,9 +1,8 @@
-# chalice deploy, chalice delete
-
 from chalice import Chalice, Response
 import boto3
 import json
 from botocore.exceptions import ClientError
+from datetime import datetime
 
 app = Chalice(app_name='taiapi')
 
@@ -13,8 +12,6 @@ s3_client = boto3.client('s3')
 BUCKET_NAME = 'jtrade1-dir'  # S3 bucket name
 
 # Helper function to fetch JSON data from S3
-
-
 def fetch_json_from_s3(key: str):
     """Fetch JSON data from S3 bucket."""
     try:
@@ -27,15 +24,12 @@ def fetch_json_from_s3(key: str):
         return {"error": f"Error decoding JSON in {key}"}
 
 # Helper function to create JSON responses
-
-
 def create_json_response(body, status_code=200):
     return Response(
         body=body,
         status_code=status_code,
         headers={'Content-Type': 'application/json'}
     )
-
 
 @app.route('/us_treasury_yield', methods=['GET'], cors=True)
 def get_categories():
@@ -45,8 +39,6 @@ def get_categories():
     return create_json_response(categories)
 
 # Endpoint to get all articles or filter by id
-
-
 @app.route('/articles', methods=['GET'], cors=True)
 @app.route('/articles/{id}', methods=['GET'], cors=True)
 def get_articles(id=None):
@@ -65,8 +57,6 @@ def get_articles(id=None):
     return create_json_response(articles)
 
 # Endpoint to get all chart data or filter by id
-
-
 @app.route('/chart', methods=['GET'], cors=True)
 @app.route('/chart/{id}', methods=['GET'], cors=True)
 def get_chart_data(id=None):
@@ -85,8 +75,6 @@ def get_chart_data(id=None):
     return create_json_response(chart_data)
 
 # Endpoint to get all categories from S3
-
-
 @app.route('/categories', methods=['GET'], cors=True)
 def get_categories():
     categories = fetch_json_from_s3('categories.json')
@@ -95,11 +83,76 @@ def get_categories():
     return create_json_response(categories)
 
 # Endpoint to get all indicators from S3
-
-
 @app.route('/indicators', methods=['GET'], cors=True)
 def get_indicators():
     indicators = fetch_json_from_s3('indicators.json')
     if "error" in indicators:
         return create_json_response({'message': 'Internal server error', 'details': indicators["error"]}, status_code=500)
     return create_json_response(indicators)
+
+# Updated endpoint to get daily OHLC data with date filters
+@app.route('/stocks/daily_ohlc/{symbol}', methods=['GET'], cors=True)
+def get_daily_ohlc(symbol):
+    if symbol:
+        key = f'api/stock_daily_bar/{symbol.upper()}.json'
+        data = fetch_json_from_s3(key)
+        if "error" in data:
+            return create_json_response(
+                {'message': f'Stock data for {symbol.upper()} not found', 'details': data["error"]},
+                status_code=404
+            )
+        else:
+            # Get query parameters
+            request = app.current_request
+            query_params = request.query_params
+
+            # Initialize date filters
+            start_date = None
+            end_date = None
+
+            # Parse 'from' and 'to' query parameters
+            if query_params:
+                from_str = query_params.get('from')
+                to_str = query_params.get('to')
+
+                date_format = "%Y-%m-%d"
+
+                if from_str:
+                    try:
+                        start_date = datetime.strptime(from_str, date_format).date()
+                    except ValueError:
+                        return create_json_response(
+                            {'message': "Invalid 'from' date format. Expected YYYY-MM-DD."},
+                            status_code=400
+                        )
+
+                if to_str:
+                    try:
+                        end_date = datetime.strptime(to_str, date_format).date()
+                    except ValueError:
+                        return create_json_response(
+                            {'message': "Invalid 'to' date format. Expected YYYY-MM-DD."},
+                            status_code=400
+                        )
+
+            # Filter data by date if filters are provided
+            if start_date or end_date:
+                filtered_data = []
+                for record in data:
+                    # Parse the date in each record
+                    try:
+                        record_date = datetime.strptime(record['date'], "%Y-%m-%d").date()
+                    except ValueError:
+                        continue  # Skip records with invalid date format
+
+                    # Apply the date filters
+                    if start_date and record_date < start_date:
+                        continue
+                    if end_date and record_date > end_date:
+                        continue
+                    filtered_data.append(record)
+                data = filtered_data
+
+            return create_json_response(data)
+    else:
+        return create_json_response({'message': 'Symbol is required'}, status_code=400)

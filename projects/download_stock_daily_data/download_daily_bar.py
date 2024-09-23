@@ -1,3 +1,9 @@
+"""
+Download Historical & Update the latest Stock Daily Data, 
+Store Local Parquet (one file), breakdown to JSON files by ticker in both local folder and S3 bucket. 
+API created under chalice_taiapi
+"""
+
 import asyncio
 import pandas as pd
 import time, json
@@ -7,7 +13,7 @@ from datetime import datetime, timedelta
 import os
 
 # Set global variables
-LOOKBACK_YEARS = 15  # For initial data fetch
+LOOKBACK_YEARS = 20  # For initial data fetch
 PRINT_LOG = False    # Toggle for logging
 MAX_CONCURRENT_REQUESTS = 10  # Adjust based on system and API limits
 PARQUET_FILE = 'stock_daily_ohlc.parquet'  # Parquet file name
