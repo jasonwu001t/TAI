@@ -1,31 +1,23 @@
 from TAI.source import BLS
-from TAI.data import DataMaster
 
-dm = DataMaster()
-dm.create_dir()
+bls = BLS(lookback_years=30)  # User can set any number of years
 
-bls = BLS()
-
-df_unemployment_rate = bls.unemployment_rate()
-df_nonfarm_payroll = bls.nonfarm_payroll()
-df_us_job_opening = bls.us_job_opening()
-df_cps_n_ces = bls.cps_n_ces()
-df_us_avg_weekly_hours = bls.us_avg_weekly_hours()
-df_unemployment_by_demographic = bls.unemployment_by_demographic()
-
-# print (df_us_job_opening, df_nonfarm_payroll)
-
-df_dict = {
-    'unemployment_rate': df_unemployment_rate,
-    'us_job_opening': df_us_job_opening,
-    'nonfarm_payroll': df_nonfarm_payroll,
-    'cps_n_ces': df_cps_n_ces,
-    'us_avg_weekly_hours': df_us_avg_weekly_hours,
-    'unemployment_by_demographic': df_unemployment_by_demographic
+series_info = {
+    'nonfarm_payroll': {'series_ids': ["CES0000000001"]},
+    'unemployment_rate': {'series_ids': ["LNS14000000"], 'mom_diff': False},
+    'us_job_opening': {'series_ids': ["JTS000000000000000JOL"]},
+    'cps_n_ces': {'series_ids': ["CES0000000001", "LNS12000000"]},
+    'us_avg_weekly_hours': {'series_ids': ["CES0500000002"]},
+    'unemployment_by_demographic': {'series_ids': ["LNS14000009", "LNS14000006", "LNS14000003", "LNS14000000"]}
 }
 
-for key,value in df_dict.items():
-    dm.save_data(value, 
-                file_name = key,
-                type="csv",
-                how='in_dir')
+# Directory where data files will be stored
+data_dir = "bls_data"
+
+# Fetch and save historical data (initial fetch or complete refresh)
+print("Fetching and saving historical data...")
+bls.fetch_and_save_bls_data(series_info, file_format="json", start_year=bls.start_year, end_year=bls.end_year, mode='overwrite')
+
+# Daily refresh to fetch only the latest data and append to historical data
+print("\nPerforming daily refresh to update historical data with the latest year...")
+bls.update_historical_data(series_info, file_format="json")
