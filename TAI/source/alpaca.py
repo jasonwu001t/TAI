@@ -200,7 +200,9 @@ class Alpaca:
                         [calls, puts], axis=1, keys=['Call', 'Put'])
                     # Create the option chain table structure
                     option_chain_table = pd.DataFrame({
-                        'Call Bid x Ask': option_chain['Call'].apply(lambda x: f"{x['bid_price']} x {x['ask_price']}" if pd.notnull(x['bid_price']) else None, axis=1),
+                        # 'Call Bid x Ask': option_chain['Call'].apply(lambda x: f"{x['bid_price']} x {x['ask_price']}" if pd.notnull(x['bid_price']) else None, axis=1),
+                        'Call Bid': option_chain['Call']['bid_price'],
+                        'Call Ask': option_chain['Call']['ask_price'],
                         'Call Volume': option_chain['Call']['ask_size'],
                         'Call Open Interest': option_chain['Call']['open_interest'],
                         'Call Delta': option_chain['Call']['delta'],
@@ -208,7 +210,9 @@ class Alpaca:
                         'Call Vega': option_chain['Call']['vega'],
                         'Call Theta': option_chain['Call']['theta'],
                         'Strike': option_chain.index,  # Strike prices come from the index
-                        'Put Bid x Ask': option_chain['Put'].apply(lambda x: f"{x['bid_price']} x {x['ask_price']}" if pd.notnull(x['bid_price']) else None, axis=1),
+                        # 'Put Bid x Ask': option_chain['Put'].apply(lambda x: f"{x['bid_price']} x {x['ask_price']}" if pd.notnull(x['bid_price']) else None, axis=1),
+                        'Put Bid': option_chain['Put']['bid_price'],
+                        'Put Ask': option_chain['Put']['ask_price'],
                         'Put Volume': option_chain['Put']['ask_size'],
                         'Put Open Interest': option_chain['Put']['open_interest'],
                         'Put Delta': option_chain['Put']['delta'],
