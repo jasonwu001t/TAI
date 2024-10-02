@@ -199,6 +199,7 @@ class Alpaca:
                     option_chain = pd.concat(
                         [calls, puts], axis=1, keys=['Call', 'Put'])
                     # Create the option chain table structure
+                    # print('OOOOOOOOOOOOOOO', option_chain)
                     option_chain_table = pd.DataFrame({
                         # 'Call Bid x Ask': option_chain['Call'].apply(lambda x: f"{x['bid_price']} x {x['ask_price']}" if pd.notnull(x['bid_price']) else None, axis=1),
                         'Call Bid': option_chain['Call']['bid_price'],
@@ -210,6 +211,7 @@ class Alpaca:
                         'Call Vega': option_chain['Call']['vega'],
                         'Call Theta': option_chain['Call']['theta'],
                         'Strike': option_chain.index,  # Strike prices come from the index
+                        # 'implied_volatility': option_chain['Call']['implied_volatility'],  #Seems like the implied volatilty is based on the strike price, not the expiration date
                         # 'Put Bid x Ask': option_chain['Put'].apply(lambda x: f"{x['bid_price']} x {x['ask_price']}" if pd.notnull(x['bid_price']) else None, axis=1),
                         'Put Bid': option_chain['Put']['bid_price'],
                         'Put Ask': option_chain['Put']['ask_price'],
@@ -231,6 +233,76 @@ class Alpaca:
                     return merged_table
             else:
                 return combined_df
+
+    def convert_nan(self, value):
+        if pd.isnull(value):
+            return None
+        else:
+            return value
+
+    def get_option_chain_json(self, underlying_symbol, expiration_date=None):
+        # ap = Alpaca()
+        # Fetch the option chain data
+        df_chain = self.get_option_chain(
+            underlying_symbol=underlying_symbol,
+            feed=None,
+            type=None,
+            strike_price_gte=None,
+            strike_price_lte=None,
+            expiration_date=expiration_date,
+            expiration_date_gte=None,
+            expiration_date_lte=None,
+            root_symbol=underlying_symbol,
+            raw=False,
+            chain_table=True
+        )
+
+        data = {
+            underlying_symbol: {
+                "expiration_dates": {}
+            }
+        }
+
+        # Define the columns for calls and puts
+        call_columns = ['Call Bid', 'Call Ask', 'Call Volume', 'Call Open Interest',
+                        'Call Delta', 'Call Gamma', 'Call Vega', 'Call Theta']
+        call_json_keys = ['bid', 'ask', 'volume', 'open_interest',
+                          'delta', 'gamma', 'vega', 'theta']
+
+        put_columns = ['Put Bid', 'Put Ask', 'Put Volume', 'Put Open Interest',
+                       'Put Delta', 'Put Gamma', 'Put Vega', 'Put Theta']
+        put_json_keys = ['bid', 'ask', 'volume', 'open_interest',
+                         'delta', 'gamma', 'vega', 'theta']
+
+        # Group the DataFrame by 'Expiration Date' if not filtering by a specific date
+        if expiration_date is None:
+            grouped = df_chain.groupby('Expiration Date')
+        else:
+            grouped = [(expiration_date, df_chain)]
+
+        for exp_date, group in grouped:
+            data[underlying_symbol]['expiration_dates'][exp_date] = {
+                "option_chain": []
+            }
+            for _, row in group.iterrows():
+                call_data = {}
+                for col, key in zip(call_columns, call_json_keys):
+                    call_data[key] = self.convert_nan(row.get(col))
+
+                put_data = {}
+                for col, key in zip(put_columns, put_json_keys):
+                    put_data[key] = self.convert_nan(row.get(col))
+
+                option_entry = {
+                    'strike': self.convert_nan(row.get('Strike')),
+                    'call': call_data,
+                    'put': put_data
+                }
+
+                data[underlying_symbol]['expiration_dates'][exp_date]['option_chain'].append(
+                    option_entry)
+
+        return data
 
     def get_option_snapshot(self, symbol_or_symbols, feed):
         """
@@ -357,22 +429,25 @@ class Alpaca:
     def get_latest_quote(self, symbol_or_symbols, asset='stock'):
         """Fetches the latest quote for the given stock or option symbol(s)."""
         if asset == 'stock':
-            req = StockLatestQuoteRequest(symbol_or_symbols=symbol_or_symbols)
+            req = StockLatestQuoteRequest(
+                symbol_or_symbols=symbol_or_symbols.upper())
             return self.stock_md_client.get_stock_latest_quote(req)
         elif asset == 'option':
-            req = OptionLatestQuoteRequest(symbol_or_symbols=symbol_or_symbols)
+            req = OptionLatestQuoteRequest(
+                symbol_or_symbols=symbol_or_symbols.upper())
             return self.option_md_client.get_option_latest_quote(req)
 
     def get_latest_trade(self, symbol_or_symbols, asset='stock'):
         """Fetches the latest trade for the given stock or option symbol(s)."""
         if asset == 'stock':
-            req = StockLatestTradeRequest(symbol_or_symbols=symbol_or_symbols)
+            req = StockLatestTradeRequest(
+                symbol_or_symbols=symbol_or_symbols.upper())
             return self.stock_md_client.get_stock_latest_trade(req)
         elif asset == 'option':
-            req = OptionLatestTradeRequest(symbol_or_symbols=symbol_or_symbols)
+            req = OptionLatestTradeRequest(
+                symbol_or_symbols=symbol_or_symbols.upper())
             return self.option_md_client.get_option_latest_trade(req)
 
-    # Account Handler
     def get_account(self):
         """Fetches account details including equity value and buying power."""
         return self.trade_client.get_account()
@@ -385,11 +460,10 @@ class Alpaca:
         """Fetches account configurations."""
         return self.trade_client.get_account_configurations()
 
-    # Trading Handler
     def place_order(self, symbol, qty, side, time_in_force):
         """Places a market order for the specified stock symbol."""
         market_order_data = MarketOrderRequest(
-            symbol=symbol,
+            symbol=symbol.upper(),
             qty=qty,
             side=OrderSide(side),
             time_in_force=TimeInForce(time_in_force)
@@ -401,7 +475,6 @@ class Alpaca:
         orders_request = GetOrdersRequest(status=status, limit=limit)
         return self.trade_client.get_orders(filter=orders_request)
 
-    # Market Data Handler
     def get_stock_historical(self, symbol_or_symbols, lookback_period,
                              timeframe='Day', end=None, currency='USD',
                              limit=None, adjustment='all', feed=None,
@@ -435,7 +508,7 @@ class Alpaca:
         start = self.now - timedelta(days=lookback_period)
 
         request_params = StockBarsRequest(
-            symbol_or_symbols=symbol_or_symbols,
+            symbol_or_symbols=symbol_or_symbols.upper(),
             timeframe=alpaca_timeframe,
             start=start,
             end=end,
@@ -458,17 +531,31 @@ class Alpaca:
 
 
 if __name__ == "__main__":
-    alpaca = Alpaca()
+    ap = Alpaca()
+    df_chain = ap.get_option_chain(
+        underlying_symbol='TSLA',
+        feed=None,
+        type=None,
+        strike_price_gte=None,
+        strike_price_lte=None,
+        expiration_date='2024-11-15',
+        expiration_date_gte=None,
+        expiration_date_lte=None,
+        root_symbol='TSLA',
+        raw=False,
+        chain_table=True
+    )
+    print(df_chain)
 
     # Example usage
-    account = alpaca.get_account()
-    print(f"Account: {account}")
+    # account = alpaca.get_account()
+    # print(f"Account: {account}")
 
-    positions = alpaca.get_positions()
-    print(f"Positions: {positions}")
+    # positions = alpaca.get_positions()
+    # print(f"Positions: {positions}")
 
-    account_configs = alpaca.get_account_configurations()
-    print(f"Account Configurations: {account_configs}")
+    # account_configs = alpaca.get_account_configurations()
+    # print(f"Account Configurations: {account_configs}")
 
-    orders = alpaca.get_orders()
-    print(f"Orders: {orders}")
+    # orders = alpaca.get_orders()
+    # print(f"Orders: {orders}")
