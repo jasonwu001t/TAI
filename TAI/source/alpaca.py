@@ -87,7 +87,7 @@ class Alpaca:
                 raw=False,
                 chain_table=True)
         """
-        req = OptionChainRequest(underlying_symbol=underlying_symbol,
+        req = OptionChainRequest(underlying_symbol=underlying_symbol.upper(),
                                  feed=feed,
                                  type=type,
                                  strike_price_gte=strike_price_gte,
@@ -170,7 +170,7 @@ class Alpaca:
 
             if join_contracts == True:
                 contracts = self.get_option_contracts(
-                    underlying_symbols=[underlying_symbol],
+                    underlying_symbols=[underlying_symbol.upper()],
                     expiration_date=expiration_date,  # '2024-09-20'
                     expiration_date_gte=expiration_date_gte,
                     expiration_date_lte=expiration_date_lte,
@@ -244,7 +244,7 @@ class Alpaca:
         # ap = Alpaca()
         # Fetch the option chain data
         df_chain = self.get_option_chain(
-            underlying_symbol=underlying_symbol,
+            underlying_symbol=underlying_symbol.upper(),
             feed=None,
             type=None,
             strike_price_gte=None,
@@ -252,7 +252,7 @@ class Alpaca:
             expiration_date=expiration_date,
             expiration_date_gte=None,
             expiration_date_lte=None,
-            root_symbol=underlying_symbol,
+            root_symbol=underlying_symbol.upper(),
             raw=False,
             chain_table=True
         )
