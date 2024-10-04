@@ -2,7 +2,7 @@
 from TAI.utils import ConfigLoader
 import json
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from zoneinfo import ZoneInfo
 
 from alpaca.data.historical import (StockHistoricalDataClient,
@@ -528,6 +528,110 @@ class Alpaca:
             trimmed_df = res1[['symbol', 'timestamp', 'open', 'high',
                                'low', 'close', 'volume']]  # .set_index('timestamp')
             return trimmed_df
+
+class OptionBet:
+    def __init__(self, ticker, expiry_date, lookback_period):
+        self.ap = Alpaca()
+    
+        self.ticker = ticker
+        self.expiry_date = expiry_date
+        self.lookback_period = lookback_period
+        
+        self.today = date.today()
+        self.today_str = self.today.strftime("%Y-%m-%d")
+        self.df_raw = self.ap.get_stock_historical(symbol_or_symbols=self.ticker, 
+                                                lookback_period=self.lookback_period, 
+                                                timeframe='Day', 
+                                                end=None, 
+                                                currency='USD', 
+                                                limit=None, 
+                                                adjustment='all', 
+                                                feed=None, 
+                                                asof=None, 
+                                                sort='asc', 
+                                                raw=False)
+        
+        self.df = self.df_raw[['timestamp', 'open', 'high', 'low', 'close', 'volume']].set_index('timestamp')
+        self.current_price = self.ap.get_latest_trade(self.ticker).get(self.ticker).price
+        self.open = self.df.tail(1)['open'][0]
+        
+        self.df_chain = self.ap.get_option_chain(
+                                underlying_symbol=self.ticker,
+                                feed=None,
+                                type=None,
+                                strike_price_gte=None,
+                                strike_price_lte=None,
+                                expiration_date=expiry_date,
+                                expiration_date_gte=None,
+                                expiration_date_lte=None,
+                                root_symbol=self.ticker,
+                                raw=False,
+                                chain_table=True)
+        self.all_strike_prices = self.df_chain['Strike'].to_list()
+        
+    def find_nearest_strike(self, value, strike_prices):
+        return min(strike_prices, key=lambda x: abs(x - value))
+
+    def nearest_value(self, input_list, find_value):
+        difference = lambda input_list: abs(input_list - find_value)
+        return min(input_list, key=difference)
+
+    def weekdays_calculator(self, end_str):
+        end = datetime.strptime(end_str, '%Y-%m-%d').date()
+        return np.busday_count(self.today, end)
+
+    def perc_change(self, df, horizon):
+        df['return_perc'] = df.pct_change(periods=horizon - 1, fill_method='ffill').round(decimals=4)['close']
+        return df.dropna()
+
+    def describe_perc_change(self):
+        horizon = self.weekdays_calculator(self.expiry_date)
+        df_perc_change = self.perc_change(self.df, horizon)[['close', 'return_perc']]
+        select_price = self.current_price
+        describe = df_perc_change.describe(percentiles=[.001, .01, .05, .1, .15, .25, .5, .75, .85, .9, .95, .99, .999])
+        describe['current_price'] = select_price
+        describe['projected_price'] = select_price * (1 + describe['return_perc'])
+        describe['percentage_change'] = describe['return_perc'] * 100
+        describe['chose_strike'] = describe['projected_price'].astype(int)
+        describe['matched_strike'] = describe['chose_strike'].apply(self.find_nearest_strike, args=(self.all_strike_prices,))
+        
+        df_merged = pd.merge(describe, self.df_chain, left_on='matched_strike', right_on='Strike', how='left', left_index=False)
+
+        df_merged.index = describe.index
+        df_merged['percentage_change'] = df_merged['percentage_change'].astype(float).round(2)
+        df_merged['projected_price'] = df_merged['projected_price'].astype(float).round(2)
+        cols_to_clear = ['projected_price', 'chose_strike', 'matched_strike', 'Call Bid', 'Call Ask', 'Put Bid', 'Put Ask']
+        rows_to_clear = ['count', 'mean', 'std', 'min']
+
+        # Set values to NaN for the specified rows and columns
+        df_merged.loc[rows_to_clear, cols_to_clear] = np.nan
+        return df_merged[['current_price', 'percentage_change', 'projected_price', 'chose_strike', 'matched_strike', 'Call Bid', 'Call Ask', 'Put Bid', 'Put Ask']]
+
+    def to_json(self):
+        # Convert the describe_perc_change dataframe into a structured JSON
+        df_merged = self.describe_perc_change()
+
+        json_result = {
+            "ticker": self.ticker,
+            "expiry_date": self.expiry_date,
+            "current_price": self.current_price,
+            "describe_perc_change": []
+        }
+        
+        for index, row in df_merged.iterrows():
+            json_result["describe_perc_change"].append({
+                "percentile": index,
+                "percentage_change": row["percentage_change"] if not pd.isna(row["percentage_change"]) else None,
+                "projected_price": row["projected_price"] if not pd.isna(row["projected_price"]) else None,
+                "chose_strike": row["chose_strike"] if not pd.isna(row["chose_strike"]) else None,
+                "matched_strike": row["matched_strike"] if not pd.isna(row["matched_strike"]) else None,
+                "call_bid": row["Call Bid"] if not pd.isna(row["Call Bid"]) else None,
+                "call_ask": row["Call Ask"] if not pd.isna(row["Call Ask"]) else None,
+                "put_bid": row["Put Bid"] if not pd.isna(row["Put Bid"]) else None,
+                "put_ask": row["Put Ask"] if not pd.isna(row["Put Ask"]) else None
+            })
+
+        return json.dumps(json_result, indent=4)
 
 
 if __name__ == "__main__":
