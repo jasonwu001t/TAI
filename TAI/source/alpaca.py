@@ -2,6 +2,7 @@
 from TAI.utils import ConfigLoader
 import json
 import pandas as pd
+import numpy as np
 from datetime import datetime, timedelta, date
 from zoneinfo import ZoneInfo
 
@@ -427,7 +428,18 @@ class Alpaca:
             return req if raw else self.option_md_client.get_option_trades(req).df
 
     def get_latest_quote(self, symbol_or_symbols, asset='stock'):
-        """Fetches the latest quote for the given stock or option symbol(s)."""
+        """Fetches the latest quote for the given stock or option symbol(s). sample output : 
+        {'MSFT': {   'ask_exchange': ' ',
+                    'ask_price': 0.0,
+                    'ask_size': 0.0,
+                    'bid_exchange': 'V',
+                    'bid_price': 416.26,
+                    'bid_size': 2.0,
+                    'conditions': ['R'],
+                    'symbol': 'MSFT',
+                    'tape': 'C',
+                    'timestamp': datetime.datetime(2024, 10, 11, 20, 0, 0, 81, tzinfo=TzInfo(UTC))}}
+        """
         if asset == 'stock':
             req = StockLatestQuoteRequest(
                 symbol_or_symbols=symbol_or_symbols.upper())
@@ -438,7 +450,16 @@ class Alpaca:
             return self.option_md_client.get_option_latest_quote(req)
 
     def get_latest_trade(self, symbol_or_symbols, asset='stock'):
-        """Fetches the latest trade for the given stock or option symbol(s)."""
+        """Fetches the latest trade for the given stock or option symbol(s). sample output : 
+        {'MSFT': {   'conditions': ['@'],
+                    'exchange': 'V',
+                    'id': 5090,
+                    'price': 416.43,
+                    'size': 200.0,
+                    'symbol': 'MSFT',
+                    'tape': 'C',
+                    'timestamp': datetime.datetime(2024, 10, 11, 19, 59, 57, 68810, tzinfo=TzInfo(UTC))}}
+        """
         if asset == 'stock':
             req = StockLatestTradeRequest(
                 symbol_or_symbols=symbol_or_symbols.upper())
@@ -507,8 +528,15 @@ class Alpaca:
 
         start = self.now - timedelta(days=lookback_period)
 
+        # Handle both string and list inputs for symbol_or_symbols
+        if isinstance(symbol_or_symbols, str):
+            symbol_or_symbols = symbol_or_symbols.upper()
+        elif isinstance(symbol_or_symbols, list):
+            symbol_or_symbols = [symbol.upper()
+                                 for symbol in symbol_or_symbols]
+
         request_params = StockBarsRequest(
-            symbol_or_symbols=symbol_or_symbols.upper(),
+            symbol_or_symbols=symbol_or_symbols,
             timeframe=alpaca_timeframe,
             start=start,
             end=end,
@@ -520,60 +548,88 @@ class Alpaca:
             sort=sort,
         )
         res = self.stock_md_client.get_stock_bars(request_params)
-        res1 = res if raw else res.df.reset_index(
-        )[['symbol', 'timestamp', 'open', 'high', 'low', 'close', 'volume', 'trade_count', 'vwap']]
-        if ohlc == False:
-            return res1
-        else:  # return yfinnace standard output
-            trimmed_df = res1[['symbol', 'timestamp', 'open', 'high',
-                               'low', 'close', 'volume']]  # .set_index('timestamp')
-            return trimmed_df
+
+        if raw:
+            # Convert BarSet object to JSON
+            json_data = {
+                # 'data': {
+                symbol: [
+                        {
+                            'close': bar.close,
+                            'high': bar.high,
+                            'low': bar.low,
+                            'open': bar.open,
+                            'symbol': bar.symbol,
+                            'timestamp': bar.timestamp.isoformat(),
+                            'trade_count': bar.trade_count,
+                            'volume': bar.volume,
+                            'vwap': bar.vwap
+                        }
+                    for bar in bars
+                ]
+                for symbol, bars in res.data.items()
+                # }
+            }
+            return json_data  # .dumps(json_data, indent=4)
+        else:
+            res1 = res.df.reset_index(
+            )[['symbol', 'timestamp', 'open', 'high', 'low', 'close', 'volume', 'trade_count', 'vwap']]
+
+            if ohlc == False:
+                return res1
+            else:  # return yfinnace standard output
+                trimmed_df = res1[['symbol', 'timestamp', 'open', 'high',
+                                   'low', 'close', 'volume']]  # .set_index('timestamp')
+                return trimmed_df
+
 
 class OptionBet:
     def __init__(self, ticker, expiry_date, lookback_period):
         self.ap = Alpaca()
-    
+
         self.ticker = ticker
         self.expiry_date = expiry_date
         self.lookback_period = lookback_period
-        
+
         self.today = date.today()
         self.today_str = self.today.strftime("%Y-%m-%d")
-        self.df_raw = self.ap.get_stock_historical(symbol_or_symbols=self.ticker, 
-                                                lookback_period=self.lookback_period, 
-                                                timeframe='Day', 
-                                                end=None, 
-                                                currency='USD', 
-                                                limit=None, 
-                                                adjustment='all', 
-                                                feed=None, 
-                                                asof=None, 
-                                                sort='asc', 
-                                                raw=False)
-        
-        self.df = self.df_raw[['timestamp', 'open', 'high', 'low', 'close', 'volume']].set_index('timestamp')
-        self.current_price = self.ap.get_latest_trade(self.ticker).get(self.ticker).price
+        self.df_raw = self.ap.get_stock_historical(symbol_or_symbols=self.ticker,
+                                                   lookback_period=self.lookback_period,
+                                                   timeframe='Day',
+                                                   end=None,
+                                                   currency='USD',
+                                                   limit=None,
+                                                   adjustment='all',
+                                                   feed=None,
+                                                   asof=None,
+                                                   sort='asc',
+                                                   raw=False)
+
+        self.df = self.df_raw[['timestamp', 'open', 'high',
+                               'low', 'close', 'volume']].set_index('timestamp')
+        self.current_price = self.ap.get_latest_trade(
+            self.ticker).get(self.ticker).price
         self.open = self.df.tail(1)['open'][0]
-        
+
         self.df_chain = self.ap.get_option_chain(
-                                underlying_symbol=self.ticker,
-                                feed=None,
-                                type=None,
-                                strike_price_gte=None,
-                                strike_price_lte=None,
-                                expiration_date=expiry_date,
-                                expiration_date_gte=None,
-                                expiration_date_lte=None,
-                                root_symbol=self.ticker,
-                                raw=False,
-                                chain_table=True)
+            underlying_symbol=self.ticker,
+            feed=None,
+            type=None,
+            strike_price_gte=None,
+            strike_price_lte=None,
+            expiration_date=expiry_date,
+            expiration_date_gte=None,
+            expiration_date_lte=None,
+            root_symbol=self.ticker,
+            raw=False,
+            chain_table=True)
         self.all_strike_prices = self.df_chain['Strike'].to_list()
-        
+
     def find_nearest_strike(self, value, strike_prices):
         return min(strike_prices, key=lambda x: abs(x - value))
 
     def nearest_value(self, input_list, find_value):
-        difference = lambda input_list: abs(input_list - find_value)
+        def difference(input_list): return abs(input_list - find_value)
         return min(input_list, key=difference)
 
     def weekdays_calculator(self, end_str):
@@ -581,26 +637,35 @@ class OptionBet:
         return np.busday_count(self.today, end)
 
     def perc_change(self, df, horizon):
-        df['return_perc'] = df.pct_change(periods=horizon - 1, fill_method='ffill').round(decimals=4)['close']
+        df['return_perc'] = df.pct_change(
+            periods=horizon - 1, fill_method='ffill').round(decimals=4)['close']
         return df.dropna()
 
     def describe_perc_change(self):
         horizon = self.weekdays_calculator(self.expiry_date)
-        df_perc_change = self.perc_change(self.df, horizon)[['close', 'return_perc']]
+        df_perc_change = self.perc_change(self.df, horizon)[
+            ['close', 'return_perc']]
         select_price = self.current_price
-        describe = df_perc_change.describe(percentiles=[.001, .01, .05, .1, .15, .25, .5, .75, .85, .9, .95, .99, .999])
+        describe = df_perc_change.describe(
+            percentiles=[.001, .01, .05, .1, .15, .25, .5, .75, .85, .9, .95, .99, .999])
         describe['current_price'] = select_price
-        describe['projected_price'] = select_price * (1 + describe['return_perc'])
+        describe['projected_price'] = select_price * \
+            (1 + describe['return_perc'])
         describe['percentage_change'] = describe['return_perc'] * 100
         describe['chose_strike'] = describe['projected_price'].astype(int)
-        describe['matched_strike'] = describe['chose_strike'].apply(self.find_nearest_strike, args=(self.all_strike_prices,))
-        
-        df_merged = pd.merge(describe, self.df_chain, left_on='matched_strike', right_on='Strike', how='left', left_index=False)
+        describe['matched_strike'] = describe['chose_strike'].apply(
+            self.find_nearest_strike, args=(self.all_strike_prices,))
+
+        df_merged = pd.merge(describe, self.df_chain, left_on='matched_strike',
+                             right_on='Strike', how='left', left_index=False)
 
         df_merged.index = describe.index
-        df_merged['percentage_change'] = df_merged['percentage_change'].astype(float).round(2)
-        df_merged['projected_price'] = df_merged['projected_price'].astype(float).round(2)
-        cols_to_clear = ['projected_price', 'chose_strike', 'matched_strike', 'Call Bid', 'Call Ask', 'Put Bid', 'Put Ask']
+        df_merged['percentage_change'] = df_merged['percentage_change'].astype(
+            float).round(2)
+        df_merged['projected_price'] = df_merged['projected_price'].astype(
+            float).round(2)
+        cols_to_clear = ['projected_price', 'chose_strike',
+                         'matched_strike', 'Call Bid', 'Call Ask', 'Put Bid', 'Put Ask']
         rows_to_clear = ['count', 'mean', 'std', 'min']
 
         # Set values to NaN for the specified rows and columns
@@ -617,7 +682,7 @@ class OptionBet:
             "current_price": self.current_price,
             "describe_perc_change": []
         }
-        
+
         for index, row in df_merged.iterrows():
             json_result["describe_perc_change"].append({
                 "percentile": index,
