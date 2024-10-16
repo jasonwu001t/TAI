@@ -463,7 +463,19 @@ class Alpaca:
         if asset == 'stock':
             req = StockLatestTradeRequest(
                 symbol_or_symbols=symbol_or_symbols.upper())
-            return self.stock_md_client.get_stock_latest_trade(req)
+            res = self.stock_md_client.get_stock_latest_trade(req)
+            json_data = {
+                        symbol_or_symbols: {
+                                'exchange': res.get(symbol_or_symbols).exchange,
+                                'id': res.get(symbol_or_symbols).id,
+                                'price': res.get(symbol_or_symbols).price,
+                                'size': res.get(symbol_or_symbols).size,
+                                'symbol': res.get(symbol_or_symbols).symbol,
+                                'tape': res.get(symbol_or_symbols).tape,
+                                'timestamp': res.get(symbol_or_symbols).timestamp.isoformat(),
+                                }
+                            }
+            return json_data
         elif asset == 'option':
             req = OptionLatestTradeRequest(
                 symbol_or_symbols=symbol_or_symbols.upper())
@@ -608,7 +620,7 @@ class OptionBet:
         self.df = self.df_raw[['timestamp', 'open', 'high',
                                'low', 'close', 'volume']].set_index('timestamp')
         self.current_price = self.ap.get_latest_trade(
-            self.ticker).get(self.ticker).price
+            self.ticker).get(self.ticker).get('price')
         self.open = self.df.tail(1)['open'][0]
 
         self.df_chain = self.ap.get_option_chain(
