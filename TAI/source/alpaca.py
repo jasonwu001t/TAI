@@ -508,8 +508,8 @@ class Alpaca:
         orders_request = GetOrdersRequest(status=status, limit=limit)
         return self.trade_client.get_orders(filter=orders_request)
 
-    def get_stock_historical(self, symbol_or_symbols, lookback_period,
-                             timeframe='Day', end=None, currency='USD',
+    def get_stock_historical(self, symbol_or_symbols, lookback_period=None,
+                             timeframe='Day', start=None, end=None, currency='USD',
                              limit=None, adjustment='all', feed=None,
                              asof=None, sort='asc', raw=False, ohlc=False):
         """
@@ -538,8 +538,15 @@ class Alpaca:
         }
         alpaca_timeframe = timeframe_mapping.get(timeframe, TimeFrame.Day)
 
-        start = self.now - timedelta(days=lookback_period)
+        if start is None:
+            start = self.now - timedelta(days=lookback_period)
+        else:
+            start = datetime.strptime(start, '%Y-%m-%d').replace(tzinfo=ZoneInfo("America/New_York"))
 
+        if end is None:
+            end = datetime.now(ZoneInfo("America/New_York")).replace(hour=0, minute=0, second=0, microsecond=0)
+        else:
+            end = datetime.strptime(end, '%Y-%m-%d').replace(tzinfo=ZoneInfo("America/New_York"))
         # Handle both string and list inputs for symbol_or_symbols
         if isinstance(symbol_or_symbols, str):
             symbol_or_symbols = symbol_or_symbols.upper()
