@@ -1,4 +1,5 @@
-import boto3, json
+import boto3
+import json
 from botocore.exceptions import ClientError
 from langchain_aws import BedrockLLM
 from langchain.memory import ConversationBufferMemory
@@ -8,15 +9,19 @@ import numpy as np
 import pandas as pd
 
 # Make sure you have configured Bedrock with the correct region, URL, and model in AWS Console
+
+
 class AWSBedrock:
-    def __init__(self, 
-                 region_name='us-west-2', 
+    def __init__(self,
+                 region_name='us-west-2',
                  endpoint_url='https://bedrock.us-west-2.amazonaws.com',
-                 model_id='anthropic.claude-instant-v1', # 'anthropic.claude-3-5-sonnet-20240620-v1:0'
-                 embedding_model_id='amazon.titan-embed-text-v1', #'amazon.titan-embed-text-v1', 'amazon.titan-embed-g1-text-02', 'amazon.titan-embed-text-v2:0'
-                 model_kwargs=None, 
+                 # 'anthropic.claude-3-5-sonnet-20240620-v1:0'
+                 model_id='anthropic.claude-instant-v1',
+                 # 'amazon.titan-embed-text-v1', 'amazon.titan-embed-g1-text-02', 'amazon.titan-embed-text-v2:0'
+                 embedding_model_id='amazon.titan-embed-text-v1',
+                 model_kwargs=None,
                  max_tokens=512):
-        
+
         self.region_name = region_name
         self.endpoint_url = endpoint_url
         self.model_id = model_id
@@ -32,9 +37,12 @@ class AWSBedrock:
         self.max_tokens = max_tokens
         self.conversation_history = []
 
-        self.bedrock = boto3.client(service_name='bedrock', region_name=self.region_name, endpoint_url=self.endpoint_url)
-        self.bedrock_runtime = boto3.client(service_name="bedrock-runtime", region_name=self.region_name)
-        self.bedrock_agent = boto3.client(service_name='bedrock-agent-runtime', region_name=self.region_name)
+        self.bedrock = boto3.client(
+            service_name='bedrock', region_name=self.region_name, endpoint_url=self.endpoint_url)
+        self.bedrock_runtime = boto3.client(
+            service_name="bedrock-runtime", region_name=self.region_name)
+        self.bedrock_agent = boto3.client(
+            service_name='bedrock-agent-runtime', region_name=self.region_name)
 
         self.llm = self.init_llm()
         self.memory = self.init_memory()
@@ -115,12 +123,13 @@ class AWSBedrock:
     # Generate a response using the LLM with the stored model_kwargs
     def _generate_response(self, messages, **kwargs):
         model = ChatBedrock(
-            client=self.bedrock_runtime, 
+            client=self.bedrock_runtime,
             model_id=self.model_id,
             model_kwargs=self.model_kwargs,
         )
         # Create the prompt template directly from the messages
-        prompt = "".join([f"{role.capitalize()}: {message}\n" for role, message in messages])
+        prompt = "".join(
+            [f"{role.capitalize()}: {message}\n" for role, message in messages])
         content_dict = {}
         try:
             response = model.invoke(prompt)
@@ -135,13 +144,15 @@ class AWSBedrock:
         self.conversation_history.append(("human", prompt))
 
         if len(self.conversation_history) == 1:
-            self.conversation_history.insert(0, ("system", "You are an honest and helpful bot. You reply to the question in a concise and direct way."))
+            self.conversation_history.insert(
+                0, ("system", "You are an honest and helpful bot. You reply to the question in a concise and direct way."))
 
-        response_content = self._generate_response(self.conversation_history, **kwargs)
+        response_content = self._generate_response(
+            self.conversation_history, **kwargs)
         self.conversation_history.append(("ai", response_content['response']))
 
         return response_content
-    
+
     # for immediate prompt, this does not cache chat history, good to use as function handler
     def direct_response(self, prompt, **kwargs):
         messages = [
@@ -149,12 +160,12 @@ class AWSBedrock:
             ("human", prompt)
         ]
         return self._generate_response(messages, **kwargs)
-    
+
     # Embedding generation using Amazon Titan Embedding model
     def generate_embedding(self, input_data):
         """
         Generate an embedding for the provided input data, which can be a string or a pandas DataFrame.
-        
+
         Args:
         input_data (str or pd.DataFrame): The input text or DataFrame to generate an embedding for.
 
@@ -165,7 +176,7 @@ class AWSBedrock:
             # Check if the input is a DataFrame and convert it to a string representation if necessary
             if isinstance(input_data, pd.DataFrame):
                 input_data = self.dataframe_to_string(input_data)
-            
+
             # Prepare the input payload as required by the model
             body = json.dumps({
                 "inputText": input_data,
@@ -182,11 +193,11 @@ class AWSBedrock:
                 accept=accept,
                 contentType=content_type
             )
-            
+
             # Parse the response body to get the embedding
             response_body = json.loads(response['body'].read())
             embedding = response_body.get('embedding')
-            
+
             if embedding:
                 # Convert embedding to numpy array for further use
                 return np.array(embedding, dtype=np.float32)
@@ -200,7 +211,7 @@ class AWSBedrock:
     def dataframe_to_string(self, df):
         """
         Convert a pandas DataFrame to a string representation.
-        
+
         Args:
         df (pd.DataFrame): The DataFrame to convert to a string.
 
@@ -213,8 +224,8 @@ class AWSBedrock:
         # schema_string += "\n" + df.head().to_string(index=False)
         return schema_string
 
-
     # Calculate cosine similarity between two embeddings
+
     def calculate_similarity(self, embedding1, embedding2):
         try:
             dot_product = np.dot(embedding1, embedding2)
@@ -245,13 +256,15 @@ class AWSBedrock:
                     chunk = event["chunk"]
                     output_text += chunk["bytes"].decode()
                     if "attribution" in chunk:
-                        citations = citations + chunk["attribution"]["citations"]
+                        citations = citations + \
+                            chunk["attribution"]["citations"]
                 if "trace" in event:
                     for trace_type in ["preProcessingTrace", "orchestrationTrace", "postProcessingTrace"]:
                         if trace_type in event["trace"]["trace"]:
                             if trace_type not in trace:
                                 trace[trace_type] = []
-                            trace[trace_type].append(event["trace"]["trace"][trace_type])
+                            trace[trace_type].append(
+                                event["trace"]["trace"][trace_type])
         except ClientError as e:
             raise
         return {
@@ -260,9 +273,72 @@ class AWSBedrock:
             "trace": trace
         }
 
+
 # Usage example
 if __name__ == "__main__":
     chatbot = AWSBedrock()
+
+    # Test conversation
+    print("Testing conversation:")
     user_input = "Hello, how can you help me today?"
     response = chatbot.conversation(prompt=user_input)
     print(response)
+
+    # Test generate_text
+    print("\nTesting generate_text:")
+    prompt = "What is the capital of France?"
+    response = chatbot.generate_text(prompt)
+    print(response)
+
+    # Test direct_response
+    print("\nTesting direct_response:")
+    prompt = "Give me a quick fact about AI."
+    response = chatbot.direct_response(prompt)
+    print(response)
+
+    # Test generate_embedding
+    print("\nTesting generate_embedding:")
+    text = "This is a sample text for embedding."
+    embedding = chatbot.generate_embedding(text)
+    print(f"Embedding shape: {embedding.shape}")
+
+    # Test calculate_similarity
+    print("\nTesting calculate_similarity:")
+    text1 = "This is the first text."
+    text2 = "This is the second text."
+    embedding1 = chatbot.generate_embedding(text1)
+    embedding2 = chatbot.generate_embedding(text2)
+    similarity = chatbot.calculate_similarity(embedding1, embedding2)
+    print(f"Similarity between texts: {similarity}")
+
+    # Test available_models and active_models
+    print("\nTesting available_models and active_models:")
+    print(f"Available models: {chatbot.available_models}")
+    print(f"Active models: {chatbot.active_models}")
+
+    # Test get_model_info
+    print("\nTesting get_model_info:")
+    model_id = chatbot.model_id
+    model_info = chatbot.get_model_info(model_id)
+    print(f"Model info for {model_id}: {model_info}")
+
+    # Test invoke_agent (Note: This requires proper configuration in AWS Bedrock)
+    print("\nTesting invoke_agent:")
+    try:
+        agent_id = "your_agent_id"
+        agent_alias_id = "your_agent_alias_id"
+        session_id = "test_session"
+        prompt = "What can you tell me about machine learning?"
+        agent_response = chatbot.invoke_agent(
+            agent_id, agent_alias_id, session_id, prompt)
+        print(f"Agent response: {agent_response['response']}")
+        print(f"Citations: {agent_response['citations']}")
+    except Exception as e:
+        print(f"Error testing invoke_agent: {e}")
+
+    # Test dataframe_to_string
+    print("\nTesting dataframe_to_string:")
+    import pandas as pd
+    df = pd.DataFrame({'A': [1, 2, 3], 'B': ['a', 'b', 'c']})
+    df_string = chatbot.dataframe_to_string(df)
+    print(f"DataFrame as string: {df_string}")
