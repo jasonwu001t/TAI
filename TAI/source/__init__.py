@@ -1,11 +1,12 @@
 # broker/__init__.py
 from .atom import Atom
-from .alpaca import AlpacaAuth,Alpaca,OptionBet
+from .alpaca import AlpacaAuth, Alpaca, OptionBet
 from .ib import IBTrade
 from .robinhood import Robinhood
 from .treasury import Treasury
 from .bls import BLS
 from .fred import Fred
+from .sec import SEC, FundamentalAnalysis
 
 __all__ = [
     'Atom',
@@ -16,5 +17,7 @@ __all__ = [
     'Robinhood',
     'Treasury',
     'BLS',
-    'Fred'
+    'Fred',
+    'SEC',
+    'FundamentalAnalysis'
 ]
