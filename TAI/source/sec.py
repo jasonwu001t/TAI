@@ -2,6 +2,7 @@ import requests
 import json
 from datetime import datetime, timedelta
 import yfinance as yf  # Used for fetching stock prices and market data
+import re
 
 
 class SEC:
@@ -15,6 +16,7 @@ class SEC:
         self.user_agent = user_agent
         self.headers = {'User-Agent': self.user_agent}
         self.all_metrics = {
+            # Core metrics
             'shares_outstanding': 'CommonStockSharesOutstanding',
             'eps_basic': 'EarningsPerShareBasic',
             'eps_diluted': 'EarningsPerShareDiluted',
@@ -35,38 +37,108 @@ class SEC:
             'operating_income': 'OperatingIncomeLoss',
             'research_and_development_expense': 'ResearchAndDevelopmentExpense',
             'short_term_investments': 'ShortTermInvestments',
-            'marketable_securities_current': 'MarketableSecuritiesCurrent'
+            'marketable_securities_current': 'MarketableSecuritiesCurrent',
+            # Additional possible metrics for Berkshire Hathaway
+            'available_for_sale_securities_current': 'AvailableForSaleSecuritiesCurrent',
+            'investments_in_debt_and_equity_securities': 'InvestmentsInDebtAndEquitySecurities',
+            'investment_securities': 'InvestmentSecurities',
+            'trading_account_assets': 'TradingAccountAssets',
+            # Add other metrics as needed
         }
 
     def get_cik_from_ticker(self, ticker):
         """
         Retrieve the Central Index Key (CIK) for a given ticker symbol.
+
+        Args:
+            ticker (str): The stock ticker symbol.
+
+        Returns:
+            str: The CIK number padded to 10 digits, or None if not found.
         """
         url = 'https://www.sec.gov/include/ticker.txt'
         response = requests.get(url, headers=self.headers)
+        if response.status_code != 200:
+            print(
+                f"Failed to retrieve ticker to CIK mapping. Status Code: {response.status_code}")
+            return None
         content = response.text
         lines = content.strip().split('\n')
         ticker_to_cik = {}
         for line in lines:
-            ticker_line, cik_line = line.split()
+            parts = line.split()
+            if len(parts) != 2:
+                continue
+            ticker_line, cik_line = parts
             ticker_to_cik[ticker_line.lower()] = cik_line
         cik = ticker_to_cik.get(ticker.lower())
         if cik:
             cik = cik.zfill(10)
+        else:
+            print(
+                f"CIK not found for ticker {ticker}. Attempting to search manually.")
+            cik = self.search_cik_manual(ticker)
         return cik
+
+    def search_cik_manual(self, ticker):
+        """
+        Manually search for CIK using company name.
+
+        Args:
+            ticker (str): The stock ticker symbol.
+
+        Returns:
+            str: The CIK number if found, else None.
+        """
+        search_url = f"https://www.sec.gov/cgi-bin/browse-edgar?CIK={ticker}&owner=exclude&action=getcompany&Find=Search"
+        response = requests.get(search_url, headers=self.headers)
+        if response.status_code == 200:
+            # Parse the response to extract CIK
+            content = response.text
+            match = re.search(r'CIK=(\d{10})', content)
+            if match:
+                return match.group(1)
+            else:
+                print(f"CIK not found for ticker {ticker}.")
+                return None
+        else:
+            print(
+                f"Error fetching data for ticker {ticker}. Status Code: {response.status_code}")
+            return None
 
     def get_company_facts(self, cik):
         """
         Fetch company facts data from the SEC's EDGAR API.
+
+        Args:
+            cik (str): The Central Index Key of the company.
+
+        Returns:
+            dict: The JSON data retrieved from the SEC's API.
         """
         url = f'https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json'
         response = requests.get(url, headers=self.headers)
-        data = response.json()
+        if response.status_code != 200:
+            print(
+                f"Failed to retrieve company facts for CIK {cik}. Status Code: {response.status_code}")
+            return {}
+        try:
+            data = response.json()
+        except json.JSONDecodeError:
+            print(f"Failed to parse JSON for CIK {cik}.")
+            data = {}
         return data
 
     def get_general_info(self, data, user_ticker):
         """
         Extract general information from the company facts data.
+
+        Args:
+            data (dict): The JSON data retrieved from the SEC's API.
+            user_ticker (str): The stock ticker symbol.
+
+        Returns:
+            dict: A dictionary containing general company information.
         """
         general_info = {
             'ticker': user_ticker.upper(),
@@ -75,73 +147,82 @@ class SEC:
         }
         return general_info
 
-    def extract_metric(self, facts, metric_name, start_date, end_date, is_beginning_balance=False):
+    def extract_metric(self, facts, metric_name, start_date, end_date):
         """
-        Extract a specific financial metric from the facts data.
+        Extract a specific financial metric from the facts data, searching all namespaces.
+
+        Args:
+            facts (dict): The 'facts' section from the company facts JSON.
+            metric_name (str): The name of the metric to extract.
+            start_date (datetime, optional): The start date for filtering data.
+            end_date (datetime, optional): The end date for filtering data.
+
+        Returns:
+            list: A list of dictionaries containing the extracted data points.
         """
-        # Try us-gaap first
-        us_gaap = facts.get('us-gaap', {})
-        metric = us_gaap.get(metric_name, {})
-
-        if not metric:
-            # If not found in us-gaap, try dei (Document and Entity Information)
-            dei = facts.get('dei', {})
-            metric = dei.get(metric_name, {})
-            if not metric:
-                # If still not found, return empty list
-                return []
-
         data_list = []
-        units = metric.get('units', {})
-        for unit in units:
-            for item in units[unit]:
-                end_date_str = item.get('end', 'N/A')
-                start_date_str = item.get('start', 'N/A')
-                if end_date_str == 'N/A':
-                    continue
-                try:
-                    item_end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
-                except ValueError:
-                    continue
-                if start_date and item_end_date < start_date:
-                    continue
-                if end_date and item_end_date > end_date:
-                    continue
-                # Determine period length
-                if 'start' in item and item['start'] != 'N/A':
+        # Search through all namespaces
+        for namespace, metrics in facts.items():
+            metric = metrics.get(metric_name, {})
+            if not metric:
+                continue
+            units = metric.get('units', {})
+            for unit in units:
+                for item in units[unit]:
+                    end_date_str = item.get('end', 'N/A')
+                    start_date_str = item.get('start', 'N/A')
+                    if end_date_str == 'N/A':
+                        continue
                     try:
-                        item_start_date = datetime.strptime(
-                            item['start'], '%Y-%m-%d')
+                        item_end_date = datetime.strptime(
+                            end_date_str, '%Y-%m-%d')
                     except ValueError:
-                        item_start_date = None
-                else:
-                    item_start_date = None
-                if item_start_date:
-                    period_days = (item_end_date - item_start_date).days
-                    if period_days <= 95:
-                        period_type = 'Quarterly'
-                    elif period_days <= 185:
-                        period_type = 'Half-Year'
-                    elif period_days <= 280:
-                        period_type = 'Year-to-Date'
+                        continue
+                    if start_date and item_end_date < start_date:
+                        continue
+                    if end_date and item_end_date > end_date:
+                        continue
+                    # Determine period length
+                    if 'start' in item and item['start'] != 'N/A':
+                        try:
+                            item_start_date = datetime.strptime(
+                                item['start'], '%Y-%m-%d')
+                        except ValueError:
+                            item_start_date = None
                     else:
-                        period_type = 'Annual'
-                else:
-                    period_type = 'Instant'
+                        item_start_date = None
+                    if item_start_date:
+                        period_days = (item_end_date - item_start_date).days
+                        if period_days <= 95:
+                            period_type = 'Quarterly'
+                        elif period_days <= 185:
+                            period_type = 'Half-Year'
+                        elif period_days <= 280:
+                            period_type = 'Year-to-Date'
+                        else:
+                            period_type = 'Annual'
+                    else:
+                        period_type = 'Instant'
 
-                data_point = {
-                    'start': item.get('start', 'N/A'),
-                    'end': item.get('end', 'N/A'),
-                    'value': item.get('val', 'N/A'),
-                    'unit': unit,
-                    'accn': item.get('accn', 'N/A'),
-                    'fy': item.get('fy', 'N/A'),
-                    'fp': item.get('fp', 'N/A'),
-                    'form': item.get('form', 'N/A'),
-                    'filed': item.get('filed', 'N/A'),
-                    'period_type': period_type
-                }
-                data_list.append(data_point)
+                    # Convert value to float if possible
+                    try:
+                        value = float(item.get('val', 'N/A'))
+                    except (ValueError, TypeError):
+                        value = None
+
+                    data_point = {
+                        'start': item.get('start', 'N/A'),
+                        'end': item.get('end', 'N/A'),
+                        'value': value,
+                        'unit': unit,
+                        'accn': item.get('accn', 'N/A'),
+                        'fy': item.get('fy', 'N/A'),
+                        'fp': item.get('fp', 'N/A'),
+                        'form': item.get('form', 'N/A'),
+                        'filed': item.get('filed', 'N/A'),
+                        'period_type': period_type
+                    }
+                    data_list.append(data_point)
         return data_list
 
     def get_financial_data(self, ticker, start_date=None, end_date=None, metrics_to_retrieve=None):
@@ -150,19 +231,29 @@ class SEC:
 
         Args:
             ticker (str): The stock ticker symbol.
-            start_date (str): The start date in 'YYYY-MM-DD' format.
-            end_date (str): The end date in 'YYYY-MM-DD' format.
-            metrics_to_retrieve (list): List of financial data keys to retrieve.
-                                        If None, all available data is retrieved.
+            start_date (str, optional): The start date in 'YYYY-MM-DD' format.
+            end_date (str, optional): The end date in 'YYYY-MM-DD' format.
+            metrics_to_retrieve (list, optional): List of financial data keys to retrieve.
+                                                  If None, all available data is retrieved.
 
         Returns:
             dict: A dictionary containing the financial data and general information.
         """
         date_format = "%Y-%m-%d"
         if start_date:
-            start_date = datetime.strptime(start_date, date_format)
+            try:
+                start_date = datetime.strptime(start_date, date_format)
+            except ValueError:
+                print(
+                    f"Invalid start_date format: {start_date}. Expected 'YYYY-MM-DD'.")
+                start_date = None
         if end_date:
-            end_date = datetime.strptime(end_date, date_format)
+            try:
+                end_date = datetime.strptime(end_date, date_format)
+            except ValueError:
+                print(
+                    f"Invalid end_date format: {end_date}. Expected 'YYYY-MM-DD'.")
+                end_date = None
 
         cik = self.get_cik_from_ticker(ticker)
         if not cik:
@@ -183,19 +274,38 @@ class SEC:
 
         # Extract only the requested metrics
         for data_key in metrics_to_retrieve:
-            if data_key in self.all_metrics:
-                metric_name = self.all_metrics[data_key]
-                if data_key == 'cash_and_cash_equivalents_begin':
-                    metric_data = self.extract_metric(
-                        facts, metric_name, start_date, end_date, is_beginning_balance=True)
-                else:
-                    metric_data = self.extract_metric(
-                        facts, metric_name, start_date, end_date)
+            metric_name = self.all_metrics.get(data_key)
+            if metric_name:
+                metric_data = self.extract_metric(
+                    facts, metric_name, start_date, end_date)
                 financial_data[data_key] = metric_data
             else:
                 print(f"Metric '{data_key}' is not recognized.")
 
         return financial_data
+
+    def list_available_metrics(self, ticker):
+        """
+        List all available financial metrics for a given ticker.
+
+        Args:
+            ticker (str): The stock ticker symbol.
+
+        Returns:
+            list: A list of available metric names.
+        """
+        cik = self.get_cik_from_ticker(ticker)
+        if not cik:
+            print(f"CIK not found for ticker {ticker}")
+            return []
+        data = self.get_company_facts(cik)
+        facts = data.get('facts', {})
+        available_metrics = []
+        for namespace, metrics in facts.items():
+            for metric_name in metrics.keys():
+                full_metric_name = f"{namespace}:{metric_name}"
+                available_metrics.append(full_metric_name)
+        return available_metrics
 
 
 class FundamentalAnalysis:
@@ -217,9 +327,9 @@ class FundamentalAnalysis:
         Fetch financial data using the SEC instance.
 
         Args:
-            start_date (str): The start date in 'YYYY-MM-DD' format.
-            end_date (str): The end date in 'YYYY-MM-DD' format.
-            metrics_to_retrieve (list): List of financial data keys to retrieve.
+            start_date (str, optional): The start date in 'YYYY-MM-DD' format.
+            end_date (str, optional): The end date in 'YYYY-MM-DD' format.
+            metrics_to_retrieve (list, optional): List of financial data keys to retrieve.
         """
         self.financial_data = self.sec.get_financial_data(
             self.ticker,
@@ -233,14 +343,20 @@ class FundamentalAnalysis:
         Fetch historical stock data using yfinance.
 
         Args:
-            start_date (str): The start date in 'YYYY-MM-DD' format.
-            end_date (str): The end date in 'YYYY-MM-DD' format.
+            start_date (str, optional): The start date in 'YYYY-MM-DD' format.
+            end_date (str, optional): The end date in 'YYYY-MM-DD' format.
         """
-        stock = yf.Ticker(self.ticker)
-        if start_date and end_date:
-            self.stock_data = stock.history(start=start_date, end=end_date)
-        else:
-            self.stock_data = stock.history(period='max')
+        # Adjust ticker symbol for yfinance
+        yf_ticker = self.ticker.replace('.', '-')
+        stock = yf.Ticker(yf_ticker)
+        try:
+            if start_date and end_date:
+                self.stock_data = stock.history(start=start_date, end=end_date)
+            else:
+                self.stock_data = stock.history(period='max')
+        except Exception as e:
+            print(f"Error fetching stock data: {e}")
+            self.stock_data = None
 
     def get_latest_stock_price(self):
         """
@@ -356,7 +472,11 @@ class FundamentalAnalysis:
 
         # Get the last four quarters
         last_four_quarters = eps_quarterly[-4:]
-        eps_ttm = sum(float(item['value']) for item in last_four_quarters)
+        try:
+            eps_ttm = sum(float(item['value']) for item in last_four_quarters)
+        except (ValueError, TypeError):
+            print("Invalid EPS values encountered.")
+            return {}
 
         if eps_ttm == 0:
             print("EPS TTM is zero, cannot calculate PE TTM.")
@@ -424,9 +544,14 @@ class FundamentalAnalysis:
         # Subtract extra days to handle weekends/holidays
         min_date = min(date_list_dt) - timedelta(days=5)
         max_date = datetime.now()
-        stock = yf.Ticker(self.ticker)
-        stock_data = stock.history(start=min_date.strftime(
-            '%Y-%m-%d'), end=max_date.strftime('%Y-%m-%d'))
+        yf_ticker = self.ticker.replace('.', '-')
+        stock = yf.Ticker(yf_ticker)
+        try:
+            stock_data = stock.history(start=min_date.strftime(
+                '%Y-%m-%d'), end=max_date.strftime('%Y-%m-%d'))
+        except Exception as e:
+            print(f"Error fetching stock data: {e}")
+            return []
 
         # Create a dictionary of stock prices with dates
         stock_prices = {}
@@ -525,21 +650,43 @@ class FundamentalAnalysis:
             beginning_cash, key=lambda x: datetime.strptime(x['end'], '%Y-%m-%d'))[-1]
 
         # Calculate net change in cash
-        net_change_in_cash = float(operating_cf_latest['value']) + float(
-            investing_cf_latest['value']) + float(financing_cf_latest['value'])
+        try:
+            net_change_in_cash = float(operating_cf_latest['value']) + float(
+                investing_cf_latest['value']) + float(financing_cf_latest['value'])
+        except (ValueError, TypeError):
+            print("Invalid cash flow values encountered.")
+            net_change_in_cash = None
+
+        if net_change_in_cash is None:
+            print("Cannot calculate net change in cash due to invalid data.")
+            return {}
 
         # Get beginning cash balance
-        beginning_cash_balance = float(beginning_cash_latest['value'])
+        try:
+            beginning_cash_balance = float(beginning_cash_latest['value'])
+        except (ValueError, TypeError):
+            print("Invalid beginning cash balance value.")
+            beginning_cash_balance = None
+
+        if beginning_cash_balance is None:
+            print(
+                "Cannot calculate ending cash balance due to invalid beginning balance.")
+            return {}
 
         # Calculate ending cash balance
         calculated_ending_cash_balance = beginning_cash_balance + net_change_in_cash
 
         # Compare with reported ending cash balance if available
         if ending_cash:
-            ending_cash_latest = sorted(
-                ending_cash, key=lambda x: datetime.strptime(x['end'], '%Y-%m-%d'))[-1]
-            reported_ending_cash_balance = float(ending_cash_latest['value'])
-            difference = reported_ending_cash_balance - calculated_ending_cash_balance
+            try:
+                ending_cash_latest = sorted(
+                    ending_cash, key=lambda x: datetime.strptime(x['end'], '%Y-%m-%d'))[-1]
+                reported_ending_cash_balance = float(
+                    ending_cash_latest['value'])
+                difference = reported_ending_cash_balance - calculated_ending_cash_balance
+            except (ValueError, TypeError):
+                reported_ending_cash_balance = None
+                difference = None
         else:
             reported_ending_cash_balance = None
             difference = None
@@ -586,12 +733,23 @@ class FundamentalAnalysis:
         fcf_data = []
         for ocf_item in operating_cf:
             ocf_end_date = ocf_item['end']
-            ocf_value = float(ocf_item['value'])
+            try:
+                ocf_value = float(ocf_item['value'])
+            except (ValueError, TypeError):
+                print(
+                    f"Invalid operating cash flow value for end date {ocf_end_date}. Skipping.")
+                continue
+
             # Find matching CAPEX item
             capex_item = next(
                 (item for item in capex_data if item['end'] == ocf_end_date), None)
             if capex_item:
-                capex_value = float(capex_item['value'])
+                try:
+                    capex_value = float(capex_item['value'])
+                except (ValueError, TypeError):
+                    print(
+                        f"Invalid capital expenditures value for end date {ocf_end_date}. Skipping.")
+                    continue
                 fcf_value = ocf_value - capex_value
                 fcf_data_point = {
                     'fy': ocf_item.get('fy', 'N/A'),
@@ -619,107 +777,177 @@ class FundamentalAnalysis:
         if not self.financial_data:
             self.fetch_financial_data()
 
-        # Get cash and cash equivalents data
-        cash_data = self.financial_data.get(
-            'cash_and_cash_equivalents_end', [])
-        if not cash_data:
-            print("Cash and cash equivalents data not available.")
-            return []
+        # Initialize an empty dictionary to hold all metrics by end date
+        data_by_end_date = {}
 
-        # Get short-term investments data
-        short_term_investments_data = self.financial_data.get(
-            'short_term_investments', [])
-        marketable_securities_data = self.financial_data.get(
-            'marketable_securities_current', [])
+        # Aggregate cash and equivalents
+        cash_metrics = [
+            'cash_and_cash_equivalents',
+            'cash_and_cash_equivalents_end',
+            # Add any other cash-related metrics if needed
+        ]
 
-        # Combine short-term investments data
-        all_sti_data = short_term_investments_data + marketable_securities_data
+        for metric_key in cash_metrics:
+            metric_data = self.financial_data.get(metric_key, [])
+            for item in metric_data:
+                end_date = item['end']
+                value = item['value']
+                if value is None:
+                    continue
+                try:
+                    value = float(value)
+                except (ValueError, TypeError):
+                    print(
+                        f"Invalid value for metric '{metric_key}' on date {end_date}. Skipping.")
+                    continue
+                data_point = data_by_end_date.setdefault(end_date, {
+                    'fy': item.get('fy', 'N/A'),
+                    'fp': item.get('fp', 'N/A'),
+                    'end_date': end_date,
+                    'cash_and_cash_equivalents': 0.0,
+                    'short_term_investments': 0.0,
+                    'cash_and_short_term_investments': 0.0,
+                    'period_type': item.get('period_type', 'N/A')
+                })
+                data_point['cash_and_cash_equivalents'] += value
+                data_point['cash_and_short_term_investments'] += value
 
-        # Sort data by end date
-        cash_data.sort(key=lambda x: datetime.strptime(x['end'], '%Y-%m-%d'))
-        all_sti_data.sort(
-            key=lambda x: datetime.strptime(x['end'], '%Y-%m-%d'))
+        # Aggregate short-term investments
+        sti_metrics = [
+            'short_term_investments',
+            'marketable_securities_current',
+            'available_for_sale_securities_current',
+            'investments_in_debt_and_equity_securities',
+            'investment_securities',
+            'trading_account_assets',
+            # Add any other investment-related metrics if needed
+        ]
 
-        # Create a list to store combined data
-        combined_data = []
+        for metric_key in sti_metrics:
+            metric_data = self.financial_data.get(metric_key, [])
+            for item in metric_data:
+                end_date = item['end']
+                value = item['value']
+                if value is None:
+                    continue
+                try:
+                    value = float(value)
+                except (ValueError, TypeError):
+                    print(
+                        f"Invalid value for metric '{metric_key}' on date {end_date}. Skipping.")
+                    continue
+                data_point = data_by_end_date.setdefault(end_date, {
+                    'fy': item.get('fy', 'N/A'),
+                    'fp': item.get('fp', 'N/A'),
+                    'end_date': end_date,
+                    'cash_and_cash_equivalents': 0.0,
+                    'short_term_investments': 0.0,
+                    'cash_and_short_term_investments': 0.0,
+                    'period_type': item.get('period_type', 'N/A')
+                })
+                data_point['short_term_investments'] += value
+                data_point['cash_and_short_term_investments'] += value
 
-        # For each period in cash data, find matching short-term investments data
-        for cash_item in cash_data:
-            cash_end_date = cash_item['end']
-            cash_value = float(cash_item['value'])
-
-            # Sum all short-term investments for the same end date
-            sti_value = sum(
-                float(item['value']) for item in all_sti_data if item['end'] == cash_end_date)
-            total_value = cash_value + sti_value
-
-            combined_data_point = {
-                'fy': cash_item.get('fy', 'N/A'),
-                'fp': cash_item.get('fp', 'N/A'),
-                'end_date': cash_end_date,
-                'cash_and_cash_equivalents': cash_value,
-                'short_term_investments': sti_value,
-                'cash_and_short_term_investments': total_value,
-                'period_type': cash_item.get('period_type', 'N/A')
-            }
-            combined_data.append(combined_data_point)
+        # Convert the dictionary to a sorted list
+        combined_data = list(data_by_end_date.values())
+        combined_data.sort(key=lambda x: datetime.strptime(
+            x['end_date'], '%Y-%m-%d'))
 
         return combined_data
+
+    def filter_financial_data(self, selected_metrics):
+        """
+        Filter the financial data to include only the selected metrics.
+
+        Args:
+            selected_metrics (list): List of metric keys to include.
+
+        Returns:
+            dict: Filtered financial data containing only the selected metrics.
+        """
+        if not self.financial_data:
+            print("Financial data not fetched yet.")
+            return {}
+
+        filtered_data = {
+            'general_info': self.financial_data.get('general_info', {})
+        }
+
+        for metric_key in selected_metrics:
+            metric_data = self.financial_data.get(metric_key)
+            if metric_data:
+                filtered_data[metric_key] = metric_data
+            else:
+                print(f"Metric '{metric_key}' not found in financial data.")
+
+        return filtered_data
 
 
 if __name__ == "__main__":
     # Initialize the SEC class with your User-Agent
+    # Replace with your actual User-Agent
     user_agent = 'YourAppName/1.0 (youremail@example.com)'
     sec = SEC(user_agent)
 
     # Initialize the FundamentalAnalysis with the SEC instance and the ticker symbol
-    ticker_symbol = 'TSLA'  # Change to your desired ticker symbol
+    ticker_symbol = 'TSLA'  # Change to your desired ticker symbol, e.g., 'TSLA'
     fa = FundamentalAnalysis(sec, ticker_symbol)
 
-    # Fetch financial data including all metrics
-    # Retrieve all available metrics
-    metrics_to_retrieve = list(sec.all_metrics.keys())
-    fa.fetch_financial_data(start_date='2023-01-01',
-                            metrics_to_retrieve=metrics_to_retrieve)
+    # Example Usage:
 
-    # Uncomment the following lines to print all financial data
-    # print("\nFinancial Data:")
-    # for metric_key, metric_values in fa.financial_data.items():
-    #     if metric_key != 'general_info':
-    #         print(f"\nMetric: {metric_key}")
-    #         for item in metric_values:
-    #             print(item)
+    # 1. List all available metrics for the ticker
+    print(f"Listing all available metrics for {ticker_symbol}...")
+    available_metrics = sec.list_available_metrics(ticker_symbol)
+    print("\nAvailable Metrics:")
+    for metric in available_metrics:
+        print(metric)
 
-    # Fetch stock data (max period to cover all dates)
-    fa.fetch_stock_data()
+    # 2. Define metrics to retrieve (allowing user to select one or multiple)
+    # For example, using 'shares_outstanding' as the selected metric
+    selected_metrics = ['shares_outstanding']
 
-    # Calculate Cash and Short-Term Investments
-    cash_and_sti_data = fa.calculate_cash_and_short_term_investments()
-    print("\nCash and Short-Term Investments Data:")
-    print(json.dumps(cash_and_sti_data, indent=4))
+    # 3. Fetch financial data with selected metrics and date range
+    start_date = '2009-01-01'  # Change as needed
+    end_date = '2023-12-31'    # Change as needed
+    fa.fetch_financial_data(start_date=start_date,
+                            end_date=end_date,
+                            metrics_to_retrieve=selected_metrics)
 
-    # Calculate Free Cash Flow
-    free_cash_flow_data = fa.calculate_free_cash_flow()
-    print("\nFree Cash Flow Data:")
-    print(json.dumps(free_cash_flow_data, indent=4))
+    # 4. Optionally, filter the financial data (if additional filtering is needed)
+    # For this example, since we've already selected metrics during fetching, this step is redundant
+    # But it's available for further filtering
+    # filtered_financial_data = fa.filter_financial_data(selected_metrics)
 
-#     Uncomment the following lines to calculate and print other financial metrics
-#     Calculate PE TTM
-    pe_ttm_data = fa.calculate_pe_ttm()
-    print("\nPE TTM Data:")
-    print(json.dumps(pe_ttm_data, indent=4))
+    # 5. Fetch stock data (optional, based on your needs)
+    fa.fetch_stock_data(start_date=start_date, end_date=end_date)
 
-#     Calculate PE Ratios Over Time
-    pe_ratios_data = fa.calculate_pe_ratios()
-    print("\nPE Ratios Over Time:")
-    print(json.dumps(pe_ratios_data, indent=4))
+    # 6. Calculate and print Shares Outstanding Data
+    shares_outstanding_data = fa.financial_data.get('shares_outstanding', [])
+    print("\nShares Outstanding Data:")
+    print(json.dumps(shares_outstanding_data, indent=4))
 
-#     Calculate Ending Cash Balance
-    ending_cash_balance_data = fa.calculate_ending_cash_balance()
-    print("\nEnding Cash Balance Data:")
-    print(json.dumps(ending_cash_balance_data, indent=4))
+#     # 7. Calculate and print other financial metrics as needed
+#     # Calculate Free Cash Flow
+#     free_cash_flow_data = fa.calculate_free_cash_flow()
+#     print("\nFree Cash Flow Data:")
+#     print(json.dumps(free_cash_flow_data, indent=4))
 
-#     Calculate Market Cap
-    market_cap_data = fa.calculate_market_cap()
-    print("\nMarket Cap Data:")
-    print(json.dumps(market_cap_data, indent=4))
+#     # Calculate PE TTM
+#     pe_ttm_data = fa.calculate_pe_ttm()
+#     print("\nPE TTM Data:")
+#     print(json.dumps(pe_ttm_data, indent=4))
+
+#     # Calculate PE Ratios Over Time
+#     pe_ratios_data = fa.calculate_pe_ratios()
+#     print("\nPE Ratios Over Time:")
+#     print(json.dumps(pe_ratios_data, indent=4))
+
+#     # Calculate Ending Cash Balance
+#     ending_cash_balance_data = fa.calculate_ending_cash_balance()
+#     print("\nEnding Cash Balance Data:")
+#     print(json.dumps(ending_cash_balance_data, indent=4))
+
+#     # Calculate Market Cap
+#     market_cap_data = fa.calculate_market_cap()
+#     print("\nMarket Cap Data:")
+#     print(json.dumps(market_cap_data, indent=4))
