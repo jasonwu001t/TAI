@@ -7,6 +7,7 @@ from .treasury import Treasury
 from .bls import BLS
 from .fred import Fred
 from .sec import SEC, FundamentalAnalysis
+from .fomc import FOMC
 
 __all__ = [
     'Atom',
@@ -19,5 +20,6 @@ __all__ = [
     'BLS',
     'Fred',
     'SEC',
-    'FundamentalAnalysis'
+    'FundamentalAnalysis',
+    'FOMC'
 ]
