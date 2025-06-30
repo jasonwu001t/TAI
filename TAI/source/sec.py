@@ -1,20 +1,128 @@
 import requests
 import json
+import logging
+import time
+import os
 from datetime import datetime, timedelta
+from functools import wraps
+from typing import Dict, List, Optional, Union
 import yfinance as yf  # Used for fetching stock prices and market data
 import re
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+
+# Configuration constants
+SEC_API_BASE_URL = "https://data.sec.gov/api/xbrl"
+SEC_TICKER_URL = "https://www.sec.gov/include/ticker.txt"
+SEC_SEARCH_URL = "https://www.sec.gov/cgi-bin/browse-edgar"
+DEFAULT_RATE_LIMIT = 10  # requests per second as per SEC requirements
+DEFAULT_USER_AGENT = "SEC-Financial-Pipeline/1.0"
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+
+def rate_limit(max_calls_per_second: int = DEFAULT_RATE_LIMIT):
+    """Decorator to enforce rate limiting on API calls."""
+    def decorator(func):
+        last_called = [0.0]
+        min_interval = 1.0 / max_calls_per_second
+        
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            elapsed = time.time() - last_called[0]
+            left_to_wait = min_interval - elapsed
+            if left_to_wait > 0:
+                time.sleep(left_to_wait)
+            result = func(*args, **kwargs)
+            last_called[0] = time.time()
+            return result
+        return wrapper
+    return decorator
+
+
+def create_session_with_retries() -> requests.Session:
+    """Create a requests session with automatic retries."""
+    session = requests.Session()
+    retry_strategy = Retry(
+        total=3,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["HEAD", "GET", "OPTIONS"],
+        backoff_factor=1
+    )
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    return session
+
+
+class SECDataCache:
+    """Simple in-memory cache for SEC data."""
+    
+    def __init__(self, ttl: int = 3600):  # 1 hour default TTL
+        self.cache = {}
+        self.ttl = ttl
+        
+    def get(self, key: str) -> Optional[Dict]:
+        """Get item from cache if not expired."""
+        if key in self.cache:
+            timestamp, data = self.cache[key]
+            if time.time() - timestamp < self.ttl:
+                return data
+            else:
+                del self.cache[key]
+        return None
+        
+    def set(self, key: str, data: Dict):
+        """Set item in cache with timestamp."""
+        self.cache[key] = (time.time(), data)
+        
+    def clear(self):
+        """Clear all cached data."""
+        self.cache.clear()
 
 
 class SEC:
-    def __init__(self, user_agent):
+    def __init__(self, user_agent: str = None, rate_limit_per_second: int = DEFAULT_RATE_LIMIT, 
+                 enable_cache: bool = True, cache_ttl: int = 3600):
         """
-        Initialize the SEC class with a user agent string.
+        Initialize the SEC class with enhanced production-ready features.
 
         Args:
             user_agent (str): The User-Agent string to be used in HTTP headers.
+                            If None, uses environment variable SEC_USER_AGENT or default.
+            rate_limit_per_second (int): Maximum API calls per second (default: 10).
+            enable_cache (bool): Whether to enable response caching (default: True).
+            cache_ttl (int): Cache time-to-live in seconds (default: 3600).
         """
-        self.user_agent = user_agent
+        # Set user agent from parameter, environment variable, or default
+        self.user_agent = (
+            user_agent or 
+            os.getenv('SEC_USER_AGENT', DEFAULT_USER_AGENT)
+        )
+        
+        # Validate user agent format (SEC requires company name and email)
+        if not self._validate_user_agent(self.user_agent):
+            logger.warning(
+                "User-Agent may not comply with SEC requirements. "
+                "Please use format: 'CompanyName/Version (email@example.com)'"
+            )
+        
         self.headers = {'User-Agent': self.user_agent}
+        self.rate_limit_per_second = rate_limit_per_second
+        self.session = create_session_with_retries()
+        
+        # Initialize cache if enabled
+        self.cache = SECDataCache(ttl=cache_ttl) if enable_cache else None
+        
+        logger.info(f"SEC client initialized with user agent: {self.user_agent}")
+        logger.info(f"Rate limit: {rate_limit_per_second} requests/second")
+        
         self.all_metrics = {
             # Core metrics
             'shares_outstanding': 'CommonStockSharesOutstanding',
@@ -43,10 +151,106 @@ class SEC:
             'investments_in_debt_and_equity_securities': 'InvestmentsInDebtAndEquitySecurities',
             'investment_securities': 'InvestmentSecurities',
             'trading_account_assets': 'TradingAccountAssets',
-            # Add other metrics as needed
+            
+            # Income Statement Metrics
+            'cost_of_revenue': 'CostOfRevenue',
+            'cost_of_goods_sold': 'CostOfGoodsAndServicesSold',
+            'selling_general_admin_expense': 'SellingGeneralAndAdministrativeExpense',
+            'interest_expense': 'InterestExpense',
+            'interest_income': 'InterestIncomeOperating',
+            'income_tax_expense': 'IncomeTaxExpenseBenefit',
+            'depreciation_expense': 'DepreciationDepletionAndAmortization',
+            'ebitda': 'EarningsBeforeInterestTaxesDepreciationAndAmortization',
+            
+            # Balance Sheet Metrics - Assets  
+            'current_assets': 'AssetsCurrent',
+            'noncurrent_assets': 'AssetsNoncurrent',
+            'accounts_receivable': 'AccountsReceivableNetCurrent',
+            'inventory': 'InventoryNet',
+            'prepaid_expenses': 'PrepaidExpenseAndOtherAssets',
+            'property_plant_equipment': 'PropertyPlantAndEquipmentNet',
+            'goodwill': 'Goodwill',
+            'intangible_assets': 'IntangibleAssetsNetExcludingGoodwill',
+            'other_assets': 'OtherAssets',
+            
+            # Balance Sheet Metrics - Liabilities
+            'current_liabilities': 'LiabilitiesCurrent',
+            'noncurrent_liabilities': 'LiabilitiesNoncurrent',
+            'accounts_payable': 'AccountsPayableCurrent',
+            'accrued_liabilities': 'AccruedLiabilitiesCurrent',
+            'short_term_debt': 'ShortTermBorrowings',
+            'long_term_debt': 'LongTermDebt',
+            'deferred_tax_liabilities': 'DeferredTaxLiabilitiesNoncurrent',
+            
+            # Balance Sheet Metrics - Equity
+            'common_stock': 'CommonStockValue',
+            'retained_earnings': 'RetainedEarningsAccumulatedDeficit',
+            'additional_paid_in_capital': 'AdditionalPaidInCapitalCommonStock',
+            'treasury_stock': 'TreasuryStockValue',
+            'accumulated_other_comprehensive_income': 'AccumulatedOtherComprehensiveIncomeLoss',
+            
+            # Cash Flow Statement Metrics
+            'depreciation_and_amortization': 'DepreciationDepletionAndAmortization',
+            'stock_based_compensation': 'ShareBasedCompensation',
+            'accounts_receivable_change': 'IncreaseDecreaseInAccountsReceivable',
+            'inventory_change': 'IncreaseDecreaseInInventories',
+            'accounts_payable_change': 'IncreaseDecreaseInAccountsPayable',
+            'deferred_income_taxes': 'DeferredIncomeTaxExpenseBenefit',
+            'acquisitions': 'PaymentsToAcquireBusinessesNetOfCashAcquired',
+            'dispositions': 'ProceedsFromDivestitureOfBusinesses',
+            'dividends_paid': 'PaymentsOfDividends',
+            'stock_repurchases': 'PaymentsForRepurchaseOfCommonStock',
+            'debt_issuance': 'ProceedsFromIssuanceOfLongTermDebt',
+            'debt_repayment': 'RepaymentsOfLongTermDebt',
+            
+            # Per Share Metrics
+            'book_value_per_share': 'BookValuePerShare',
+            'tangible_book_value_per_share': 'TangibleBookValuePerShare',
+            'cash_per_share': 'CashAndCashEquivalentsPerShare',
+            
+            # Additional Financial Ratios and Metrics
+            'working_capital': 'WorkingCapital',
+            'net_debt': 'NetDebt',
+            'enterprise_value': 'EnterpriseValue',
+            'market_capitalization': 'MarketCapitalization',
+            
+            # Segment and Geographic Data
+            'revenue_from_external_customers': 'RevenueFromExternalCustomers',
+            'intersegment_revenues': 'IntersegmentRevenues',
+            
+            # Industry-Specific Metrics
+            'loan_loss_provision': 'ProvisionForLoanAndLeaseLosses',  # Banking
+            'net_interest_income': 'InterestIncomeExpenseNet',  # Banking
+            'premium_revenue': 'PremiumsEarnedNet',  # Insurance
+            'investment_income': 'InvestmentIncomeNet',  # Insurance/Financial
+            'oil_gas_reserves': 'ProvedOilAndGasReserves',  # Energy
+            'same_store_sales': 'SameStoreSalesGrowth',  # Retail
+            
+            # Alternative metric names (some companies use different XBRL tags)
+            'total_revenue': 'RevenueFromContractWithCustomerExcludingAssessedTax',
+            'net_sales': 'SalesRevenueNet',
+            'service_revenue': 'RevenueFromContractWithCustomerIncludingAssessedTax',
+            'product_revenue': 'ProductSales',
+            'subscription_revenue': 'SubscriptionRevenue',
         }
 
-    def get_cik_from_ticker(self, ticker):
+    def _validate_user_agent(self, user_agent: str) -> bool:
+        """
+        Validate that the user agent meets SEC requirements.
+        
+        Args:
+            user_agent (str): The user agent string to validate.
+            
+        Returns:
+            bool: True if user agent appears to meet SEC requirements.
+        """
+        # SEC recommends format: "CompanyName/Version (email@example.com)"
+        # Check for presence of email pattern
+        email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+        return bool(re.search(email_pattern, user_agent))
+
+    @rate_limit()
+    def get_cik_from_ticker(self, ticker: str) -> Optional[str]:
         """
         Retrieve the Central Index Key (CIK) for a given ticker symbol.
 
@@ -56,31 +260,61 @@ class SEC:
         Returns:
             str: The CIK number padded to 10 digits, or None if not found.
         """
-        url = 'https://www.sec.gov/include/ticker.txt'
-        response = requests.get(url, headers=self.headers)
-        if response.status_code != 200:
-            print(
-                f"Failed to retrieve ticker to CIK mapping. Status Code: {response.status_code}")
+        ticker = ticker.upper().strip()
+        cache_key = f"cik_mapping_{ticker}"
+        
+        # Check cache first
+        if self.cache:
+            cached_result = self.cache.get(cache_key)
+            if cached_result:
+                logger.debug(f"Cache hit for ticker {ticker}")
+                return cached_result.get('cik')
+        
+        try:
+            logger.info(f"Fetching CIK for ticker: {ticker}")
+            response = self.session.get(SEC_TICKER_URL, headers=self.headers, timeout=30)
+            response.raise_for_status()
+            
+            content = response.text
+            lines = content.strip().split('\n')
+            ticker_to_cik = {}
+            
+            for line in lines:
+                parts = line.split()
+                if len(parts) != 2:
+                    continue
+                ticker_line, cik_line = parts
+                ticker_to_cik[ticker_line.lower()] = cik_line
+            
+            cik = ticker_to_cik.get(ticker.lower())
+            if cik:
+                cik = cik.zfill(10)
+                logger.info(f"Found CIK {cik} for ticker {ticker}")
+                
+                # Cache the result
+                if self.cache:
+                    self.cache.set(cache_key, {'cik': cik})
+                    
+                return cik
+            else:
+                logger.warning(f"CIK not found for ticker {ticker}. Attempting manual search.")
+                cik = self.search_cik_manual(ticker)
+                
+                # Cache the result even if None to avoid repeated searches
+                if self.cache:
+                    self.cache.set(cache_key, {'cik': cik})
+                    
+                return cik
+                
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to retrieve ticker to CIK mapping: {e}")
             return None
-        content = response.text
-        lines = content.strip().split('\n')
-        ticker_to_cik = {}
-        for line in lines:
-            parts = line.split()
-            if len(parts) != 2:
-                continue
-            ticker_line, cik_line = parts
-            ticker_to_cik[ticker_line.lower()] = cik_line
-        cik = ticker_to_cik.get(ticker.lower())
-        if cik:
-            cik = cik.zfill(10)
-        else:
-            print(
-                f"CIK not found for ticker {ticker}. Attempting to search manually.")
-            cik = self.search_cik_manual(ticker)
-        return cik
+        except Exception as e:
+            logger.error(f"Unexpected error in get_cik_from_ticker: {e}")
+            return None
 
-    def search_cik_manual(self, ticker):
+    @rate_limit()
+    def search_cik_manual(self, ticker: str) -> Optional[str]:
         """
         Manually search for CIK using company name.
 
@@ -90,25 +324,35 @@ class SEC:
         Returns:
             str: The CIK number if found, else None.
         """
-        search_url = f"https://www.sec.gov/cgi-bin/browse-edgar?CIK={ticker}&owner=exclude&action=getcompany&Find=Search"
-        response = requests.get(search_url, headers=self.headers)
-        if response.status_code == 200:
+        try:
+            search_url = f"{SEC_SEARCH_URL}?CIK={ticker}&owner=exclude&action=getcompany&Find=Search"
+            logger.info(f"Manual CIK search for ticker: {ticker}")
+            
+            response = self.session.get(search_url, headers=self.headers, timeout=30)
+            response.raise_for_status()
+            
             # Parse the response to extract CIK
             content = response.text
             match = re.search(r'CIK=(\d{10})', content)
             if match:
-                return match.group(1)
+                cik = match.group(1)
+                logger.info(f"Manual search found CIK {cik} for ticker {ticker}")
+                return cik
             else:
-                print(f"CIK not found for ticker {ticker}.")
+                logger.warning(f"Manual search: CIK not found for ticker {ticker}")
                 return None
-        else:
-            print(
-                f"Error fetching data for ticker {ticker}. Status Code: {response.status_code}")
+                
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error in manual CIK search for ticker {ticker}: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error in manual CIK search: {e}")
             return None
 
-    def get_company_facts(self, cik):
+    @rate_limit()
+    def get_company_facts(self, cik: str) -> Dict:
         """
-        Fetch company facts data from the SEC's EDGAR API.
+        Fetch company facts data from the SEC's EDGAR API with caching and error handling.
 
         Args:
             cik (str): The Central Index Key of the company.
@@ -116,18 +360,62 @@ class SEC:
         Returns:
             dict: The JSON data retrieved from the SEC's API.
         """
-        url = f'https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json'
-        response = requests.get(url, headers=self.headers)
-        if response.status_code != 200:
-            print(
-                f"Failed to retrieve company facts for CIK {cik}. Status Code: {response.status_code}")
+        if not cik:
+            logger.error("CIK is required but not provided")
             return {}
+            
+        # Ensure CIK is properly formatted
+        cik = str(cik).zfill(10)
+        cache_key = f"company_facts_{cik}"
+        
+        # Check cache first
+        if self.cache:
+            cached_result = self.cache.get(cache_key)
+            if cached_result:
+                logger.debug(f"Cache hit for company facts CIK {cik}")
+                return cached_result
+        
         try:
+            url = f'{SEC_API_BASE_URL}/companyfacts/CIK{cik}.json'
+            logger.info(f"Fetching company facts for CIK: {cik}")
+            
+            response = self.session.get(url, headers=self.headers, timeout=60)
+            response.raise_for_status()
+            
             data = response.json()
-        except json.JSONDecodeError:
-            print(f"Failed to parse JSON for CIK {cik}.")
-            data = {}
-        return data
+            
+            # Validate the response structure
+            if not isinstance(data, dict):
+                logger.error(f"Invalid response format for CIK {cik}")
+                return {}
+                
+            if 'facts' not in data:
+                logger.warning(f"No facts section found in response for CIK {cik}")
+                return {}
+            
+            logger.info(f"Successfully retrieved company facts for CIK {cik}")
+            
+            # Cache the result
+            if self.cache:
+                self.cache.set(cache_key, data)
+                
+            return data
+            
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                logger.error(f"Company facts not found for CIK {cik} (404)")
+            else:
+                logger.error(f"HTTP error retrieving company facts for CIK {cik}: {e}")
+            return {}
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Request error retrieving company facts for CIK {cik}: {e}")
+            return {}
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decode error for CIK {cik}: {e}")
+            return {}
+        except Exception as e:
+            logger.error(f"Unexpected error retrieving company facts for CIK {cik}: {e}")
+            return {}
 
     def get_general_info(self, data, user_ticker):
         """
@@ -368,7 +656,7 @@ class FundamentalAnalysis:
         if self.stock_data is None:
             self.fetch_stock_data()
         if not self.stock_data.empty:
-            latest_price = self.stock_data['Close'][-1]
+            latest_price = self.stock_data['Close'].iloc[-1]
             return latest_price
         else:
             print("Stock data is empty.")
