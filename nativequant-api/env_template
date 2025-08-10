@@ -1,0 +1,36 @@
+# Trading APIs
+ALPACA_API_KEY=your_alpaca_key
+ALPACA_API_SECRET=your_alpaca_secret
+ALPACA_BASE_URL=https://paper-api.alpaca.markets
+
+# Interactive Brokers
+IB_HOST=127.0.0.1
+IB_PORT=7497
+IB_CLIENT_ID=1
+
+# Robinhood
+ROBINHOOD_USERNAME=your_username
+ROBINHOOD_PASSWORD=your_password
+ROBINHOOD_PYOPT=your_2fa_secret
+
+# Polygon
+POLYGON_API_KEY=your_polygon_key
+
+# Economic Data
+FRED_API_KEY=your_fred_key
+BLS_API_KEY=your_bls_key
+
+# AWS Services
+AWS_ACCESS_KEY_ID=your_aws_access_key_id
+AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
+AWS_REGION_NAME=us-east-1
+
+# OpenAI
+OPENAI_API_KEY=your_openai_key
+
+# SEC EDGAR
+SEC_USER_AGENT=YourApp/1.0 (your-email@example.com)
+
+# Slack (optional)
+SLACK_BOT_TOKEN=xoxb-your-bot-token
+SLACK_APP_TOKEN=xapp-your-app-token
